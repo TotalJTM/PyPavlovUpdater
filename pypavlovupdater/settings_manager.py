@@ -41,7 +41,6 @@ class Conf_Manager:
 	# primary means of updating configuration from program, call os.remove('PPU.conf') before using
 	def make_new_conf_file(self, modio_api_token=None, pavlov_mod_dir_path=None):
 		conf_file = open(self.fileaddr, 'x+')
-		print(conf_file)
 
 		conts = f"""# =*=*=*=*=   PyPavlovUpdater.exe   =*=*=*=*=
 #

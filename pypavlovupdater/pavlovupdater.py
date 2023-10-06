@@ -5,6 +5,9 @@ import tempfile
 import zipfile
 import hashlib
 
+major_vers = 1
+minor_vers = 0
+
 class PavlovUpdater:
 	# need to initialize the class with:
 	#	pavlov_mod_dir_path = path to the pavlov mod directory
@@ -156,82 +159,85 @@ class PavlovUpdater:
 	#	version = version id of the map version that will be installed
 	#	code_to_run_during_download = optional function call to replace code executed during mod download (for a progress bar)
 	def download_modio_file(self, ugc, version, code_to_run_during_download=None):
-		# get mod file information
-		resp = self.modio_get(f'games/3959/mods/{ugc}/files/{version}')
-		if resp == None:
-			return None
+		try:
+			# get mod file information
+			resp = self.modio_get(f'games/3959/mods/{ugc}/files/{version}')
+			if resp == None:
+				return None
 
-		# check the virus status of the file
-		if resp['virus_positive'] != 0:
-			print(f'Virus detected, skipping')
-			return None
+			# check the virus status of the file
+			if resp['virus_positive'] != 0:
+				print(f'Virus detected, skipping')
+				return None
 
-		# check if the mod directory exists
-		if os.path.exists(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
-			# iter through the UGC folder to delete files/folders
-			try:
-				for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data'):
-					for f in files:
-						# print(f'{path}/{f}')
-						os.remove(f'{path}/{f}')
-				for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
-					for f in files:
-						# print(f'{path}/{f}')
-						os.remove(f'{path}/{f}')
-					for f in folders:
-						# print(f'{path}/{f}')
-						os.rmdir(f'{path}/{f}')
-			except Exception as e:
-				print(f'Skipped removing dir items : {e}')
-		# if the directory doesnt exist, make the directory
-		else:
-			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
-		# make the Data directory
-		os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
+			# check if the mod directory exists
+			if os.path.exists(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
+				# iter through the UGC folder to delete files/folders
+				try:
+					for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data'):
+						for f in files:
+							# print(f'{path}/{f}')
+							os.remove(f'{path}/{f}')
+					for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
+						for f in files:
+							# print(f'{path}/{f}')
+							os.remove(f'{path}/{f}')
+						for f in folders:
+							# print(f'{path}/{f}')
+							os.rmdir(f'{path}/{f}')
+				except Exception as e:
+					print(f'Skipped removing dir items : {e}')
+			# if the directory doesnt exist, make the directory
+			else:
+				os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
+			# make the Data directory
+			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
 
-		# this code segment is from this site: https://www.alpharithms.com/progress-bars-for-python-downloads-580122/
-		# use a context manager to make an HTTP request and file
-		import sys, time
-		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Accept': 'application/json'}
-		print(f'Making request to Mod.io')
-		# make the request
-		with requests.get(resp['download']['binary_url'], headers=head) as r:
-			print('Downloading mod')
-			with tempfile.NamedTemporaryFile(delete=False) as file:
-				if code_to_run_during_download == None:
-					code_to_run_during_download()
-				else:
-					# Get the total size, in bytes, from the response header
-					total_size = int(r.headers.get('Content-Length'))
-					# Define the size of the chunk to iterate over (Mb)
-					chunk_size = 1000
-					# iterate over every chunk and calculate % of total
-					for i, chunk in enumerate(r.iter_content(chunk_size=chunk_size)):
-						# calculate current percentage
-						c = i * chunk_size / total_size * 100
-						# write current % to console, pause for .1ms, then flush console
-						sys.stdout.write(f"\r{round(c, 4)}%")
-						sys.stdout.flush()
+			# this code segment is from this site: https://www.alpharithms.com/progress-bars-for-python-downloads-580122/
+			# use a context manager to make an HTTP request and file
+			import sys, time
+			head = {'Authorization': f'Bearer {self.modio_api_token}', 'Accept': 'application/json'}
+			print(f'Making request to Mod.io')
+			# make the request
+			with requests.get(resp['download']['binary_url'], headers=head) as r:
+				print('Downloading mod')
+				with tempfile.NamedTemporaryFile(delete=False) as file:
+					if code_to_run_during_download != None:
+						code_to_run_during_download()
+					else:
+						# Get the total size, in bytes, from the response header
+						total_size = int(r.headers.get('Content-Length'))
+						# Define the size of the chunk to iterate over (Mb)
+						chunk_size = 1000
+						# iterate over every chunk and calculate % of total
+						for i, chunk in enumerate(r.iter_content(chunk_size=chunk_size)):
+							# calculate current percentage
+							c = i * chunk_size / total_size * 100
+							# write current % to console, pause for .1ms, then flush console
+							sys.stdout.write(f"\r{round(c, 4)}%")
+							sys.stdout.flush()
 
-				# write 100% to the terminal
-				sys.stdout.write(f"\r100.0000%")
-				sys.stdout.flush()
-				
-				# update temp name var and write to the file
-				print('\nWriting to file')
-				temp_name = file.name
-				file.write(r.content)
+					# write 100% to the terminal
+					sys.stdout.write(f"\r100.0000%")
+					sys.stdout.flush()
+					
+					# update temp name var and write to the file
+					print('\nWriting to file')
+					temp_name = file.name
+					file.write(r.content)
 
-		# unzip the downloaded file and place it in the Data directory
-		with zipfile.ZipFile(temp_name, 'r') as z:
-			z.extractall(f"{self.pavlov_mod_dir_path}/UGC{ugc}/Data/")
+			# unzip the downloaded file and place it in the Data directory
+			with zipfile.ZipFile(temp_name, 'r') as z:
+				z.extractall(f"{self.pavlov_mod_dir_path}/UGC{ugc}/Data/")
 
-		# remove temp file
-		os.remove(temp_name)
+			# remove temp file
+			os.remove(temp_name)
 
-		# open the 'taint' file and write the new version
-		with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
-			f.write(f'{version}')
+			# open the 'taint' file and write the new version
+			with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
+				f.write(f'{version}')
+		except:
+			print(f'Could not install mod, skipping')
 
 	# find miscomparisons between modio latest mod versions and installed mod versions
 	#	subscribed_list = list of subscribed mod files (expects output from get_subscribed_modlist())
@@ -307,6 +313,8 @@ class PavlovUpdater:
 
 
 if __name__ == "__main__":
+	print(f'PyPavlovUpdater Version {major_vers}.{minor_vers}\n')
+
 	# use the configuration manager to load configuration variables from the .conf file
 	import settings_manager
 
