@@ -15,3 +15,9 @@ The CLI interface can be launched by running `update_pavlov_mods_cli.bat`. The p
 2) The directory location for the Pavlov mod folder (usually `C:\Users\__user__\AppData\Local\Pavlov\Saved\Mods` but may vary for your installation)
 
 The program will then get the users subscribed Pavlov mods from Mod.io, get the locally installed mods from the Pavlov mod folder, and compare the two lists against eachother. When out-of-date mods or not installed are detected, the mods are automatically downloaded. When a mod that is downloaded but not subscribed to is detected, the mod is automatically subscribed to. 
+
+### GUI Interface
+The GUI interface can be launched by running `update_pavlov_mods_cli.bat` or by opening the `PyPavlovUpdater.exe` executable. The user will need to enter the same API token and mod folder directory listed above into the Options Menu. The user can then press the 'Open Download Menu' button to download uninstalled or outdated mods, or by pressing the 'Open Subscribed Mod Manager' to view subscribed mod data (work in progress).
+
+#### Building the GUI Interface
+The GUI is built using pyinstaller. To rebuild the GUI from python, use the `make_pavlovupdater_gui_exe.bat` script and get the executable from pavlovupdater/dist
