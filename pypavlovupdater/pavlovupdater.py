@@ -45,27 +45,112 @@ class PavlovUpdater:
 		
 	# make a post request to modio
 	#	route = address to make request at (ex. games/3959/mods)
-	def modio_post(self, route):
+	def modio_post(self, route, ret_json=True):
 		# assemble address and header
 		addr = f"{self.modio_api_url}/{route}"
 		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
 		# send request
 		response = requests.post(addr, params={}, headers=head)
 		# convert the response to a json dict
-		d = response.json()
-		if 'error' in d.keys():
-			print(f"Error code {d['error']['code']}, {d['error']['message']}")
-			return None
+		if ret_json == True:
+			d = response.json()
+			if 'error' in d.keys():
+				print(f"Error code {d['error']['code']}, {d['error']['message']}")
+				return None
 
-		return d
+		if ret_json:
+			return d
+		else:
+			return response
 	
+	
+	# make a delete request to modio
+	#	route = address to make request at (ex. games/3959/mods)
+	def modio_delete(self, route):
+		# assemble address and header
+		addr = f"{self.modio_api_url}/{route}"
+		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
+		# send request
+		response = requests.delete(addr, params={}, headers=head)
+		# print(response)
+
+		return response
+	
+	def get_modio_image(self, route):
+		# assemble address and header
+		# addr = f"{self.modio_api_url}/{route}"
+		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
+		# send request
+		response = requests.get(route, params={}, headers=head)
+		# print(response)
+
+		if response.status_code != 200:
+			return None
+		return response.content
+
 	# get the full modlist for Pavlov
 	def get_pavlov_modlist(self):
-		resp = self.modio_get(f'games/{self.pavlov_gameid}/mods')
-		if resp == None:
+		mods = []
+		init_resp = self.modio_get(f'games/{self.pavlov_gameid}/mods')
+		if init_resp == None:
 				return None
-		return resp
+		
+		# create a dict to enter into the mods folder
+		def make_entry(m):
+			modfile_live_win = None
+			for p in m['platforms']:
+				# only use downloads for the target operating system
+				if p['platform'] == self.target_os:
+					modfile_live_win = p['modfile_live']
+			
+			if modfile_live_win == None:
+				return None
+
+			# attributes in a subscribed modlist entry
+			return {
+				'id':m['id'], 
+				'name':m['name'],
+				'name_id':m['name_id'], 
+				'maker':m['submitted_by']['username'], 
+				'date_added':m['date_added'], 
+				'date_updated':m['date_updated'], 
+				'date_live':m['date_live'], 
+				'description':m['description_plaintext'],
+				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
+				'modfile':{
+					'id': modfile_live_win,
+					'date_added':m['modfile']['date_added'],
+					'filesize':m['modfile']['filesize'],
+					'filehash':m['modfile']['filehash'],
+					'version':m['modfile']['version'],
+					'binary_url':m['modfile']['download']['binary_url'],
+				}
+			}
+
+		# go through response and make/add entrys to the mods arr
+		for m in init_resp['data']:
+			entry = make_entry(m)
+			if entry != None:
+				mods.append(entry)
+
+		# calculate number of pages to get all users subscribed mods
+		total_pages = int(init_resp['result_total']/init_resp['result_count'])+1
+
+		# iter through pages calculated
+		for i in range(1,total_pages):
+			# get new response (but paginated)
+			resp = self.modio_get(f'games/{self.pavlov_gameid}/mods?_offset={int(i*100)}')#?game-id={self.pavlov_gameid}
+			if resp == None:
+				return None
+			# go through response and make/add entrys to the mods arr
+			for m in resp['data']:
+				entry = make_entry(m)
+				if entry != None:
+					mods.append(entry)
+				
+		return mods
 	
+
 	# get the full subscription list of the user 
 	# returns a dictionary entry for each subscribed mod with attributes listed below
 	def get_subscribed_modlist(self):
@@ -96,6 +181,8 @@ class PavlovUpdater:
 				'date_added':m['date_added'], 
 				'date_updated':m['date_updated'], 
 				'date_live':m['date_live'], 
+				'description':m['description_plaintext'],
+				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
 				'modfile':{
 					'id': modfile_live_win,
 					'date_added':m['modfile']['date_added'],
@@ -160,10 +247,20 @@ class PavlovUpdater:
 	#	code_to_run_during_download = optional function call to replace code executed during mod download (for a progress bar)
 	def download_modio_file(self, ugc, version, code_to_run_during_download=None):
 		try:
+			# got file info
+			# code to support gui
+			if code_to_run_during_download != None:
+				code_to_run_during_download(-3)
+
 			# get mod file information
 			resp = self.modio_get(f'games/3959/mods/{ugc}/files/{version}')
 			if resp == None:
 				return None
+			
+			# got file info
+			# code to support gui
+			if code_to_run_during_download != None:
+				code_to_run_during_download(-2)
 
 			# check the virus status of the file
 			if resp['virus_positive'] != 0:
@@ -193,38 +290,62 @@ class PavlovUpdater:
 			# make the Data directory
 			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
 
+			# made dir
+			# code to support gui
+			if code_to_run_during_download != None:
+				code_to_run_during_download(-1)
+
 			# this code segment is from this site: https://www.alpharithms.com/progress-bars-for-python-downloads-580122/
 			# use a context manager to make an HTTP request and file
 			import sys, time
 			head = {'Authorization': f'Bearer {self.modio_api_token}', 'Accept': 'application/json'}
 			print(f'Making request to Mod.io')
+
+			temp_name = None
 			# make the request
-			with requests.get(resp['download']['binary_url'], headers=head) as r:
-				print('Downloading mod')
+			with requests.get(resp['download']['binary_url'], headers=head, stream=True) as r:
+				# tell gui the download has begun
+				# code to support gui
+				if code_to_run_during_download != None:
+					code_to_run_during_download(0)
+				else:
+					print('Downloading mod')
+
+				last_c = 1	# counter for gui update
+				last_std_write = 0 # counter for print() update
 				with tempfile.NamedTemporaryFile(delete=False) as file:
-					if code_to_run_during_download != None:
-						code_to_run_during_download()
-					else:
-						# Get the total size, in bytes, from the response header
-						total_size = int(r.headers.get('Content-Length'))
-						# Define the size of the chunk to iterate over (Mb)
-						chunk_size = 1000
-						# iterate over every chunk and calculate % of total
-						for i, chunk in enumerate(r.iter_content(chunk_size=chunk_size)):
-							# calculate current percentage
-							c = i * chunk_size / total_size * 100
+					temp_name = file.name
+					# Get the total size, in bytes, from the response header
+					total_size = int(r.headers.get('Content-Length'))
+					# Define the size of the chunk to iterate over (Mb)
+					chunk_size = 1000
+					# iterate over every chunk and calculate % of total
+					for i, chunk in enumerate(r.iter_content(chunk_size=chunk_size)):
+						file.write(chunk)
+						# calculate current percentage
+						c = i * chunk_size / total_size * 100							# 
+						# code to support gui
+						if code_to_run_during_download != None:
+							if c+1 > last_c:
+								last_c += 1
+								code_to_run_during_download(c)
+						else:
 							# write current % to console, pause for .1ms, then flush console
-							sys.stdout.write(f"\r{round(c, 4)}%")
-							sys.stdout.flush()
+							if c > last_std_write+0.1:
+								last_std_write = c
+								sys.stdout.write(f"\r{round(c, 1)}%")
+								sys.stdout.flush()
+
 
 					# write 100% to the terminal
-					sys.stdout.write(f"\r100.0000%")
-					sys.stdout.flush()
-					
-					# update temp name var and write to the file
-					print('\nWriting to file')
-					temp_name = file.name
-					file.write(r.content)
+					if code_to_run_during_download == None:
+						sys.stdout.write(f"\r100.0000%\n")
+						sys.stdout.flush()
+			
+			# tell the gui the download is complete
+			if code_to_run_during_download != None: 
+				code_to_run_during_download(100.0)
+
 
 			# unzip the downloaded file and place it in the Data directory
 			with zipfile.ZipFile(temp_name, 'r') as z:
@@ -236,19 +357,21 @@ class PavlovUpdater:
 			# open the 'taint' file and write the new version
 			with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
 				f.write(f'{version}')
-		except:
+		except Exception as e:
+			print(e)
 			print(f'Could not install mod, skipping')
 
 	# find miscomparisons between modio latest mod versions and installed mod versions
 	#	subscribed_list = list of subscribed mod files (expects output from get_subscribed_modlist())
 	#	installed_list = list of installed mod files (expects output from get_installed_modlist())
-	def find_miscompares_in_modlists(self, subscribed_list, installed_list):
+	def find_miscompares_in_modlists(self, subscribed_list, installed_list, printout=True):
 		miscompares = []
 		not_installed = []
 		not_subscribed = []
 		subscribed_ids = []
 		# print table header and iter mods in subscribed_list
-		print(f'Status     |  {"Map Name":50s}  | UGC        | Version (modio : installed)')
+		if printout:
+			print(f'Status     |  {"Map Name":50s}  | UGC        | Version (modio : installed)')
 		for item in subscribed_list:
 			# add id to subscribed ids (used for not_subscribe arr assembly)
 			subscribed_ids.append(item['id'])
@@ -256,13 +379,16 @@ class PavlovUpdater:
 			if item['id'] in installed_list:
 				# compare the version from mod.io against the taint file version
 				if item['modfile']['id'] == installed_list[item['id']]:
-					print(f'Up to date | "{item["name"]:50s}" | UGC{item["id"]} | {item["modfile"]["id"]} == {installed_list[item["id"]]}')
+					if printout:
+						print(f'Up to date | "{item["name"]:50s}" | UGC{item["id"]} | {item["modfile"]["id"]} == {installed_list[item["id"]]}')
 				else:
-					print(f'Mismatch in id | "{item["name"]:46s}" | UGC{item["id"]} | {item["modfile"]["id"]} != {installed_list[item["id"]]}')
+					if printout:
+						print(f'Mismatch in id | "{item["name"]:46s}" | UGC{item["id"]} | {item["modfile"]["id"]} != {installed_list[item["id"]]}')
 					# add to miscompare arr since it is different from the latest version
 					miscompares.append(item)
 			else:
-				print(f'Mod not installed | {" ":43s} | UGC{item["id"]}')
+				if printout:
+					print(f'Mod not installed | {" ":43s} | UGC{item["id"]}')
 				# add to not_installed arr since id is not installed
 				not_installed.append(item)
 		

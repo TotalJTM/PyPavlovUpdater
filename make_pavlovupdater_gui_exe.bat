@@ -4,7 +4,7 @@ SET ENVDIR=env
 SET PYTHON_PROG_DIR=pypavlovupdater
 SET PYTHON_PROGRAM=pavlovupdater_gui.py
 SET WINDOW_TIMEOUT=20
-set WINDOW_TITLE="PyPavlovUpdater GUI"
+set WINDOW_TITLE="PyPavlovUpdater Gui Installer"
 
 :: Check if env can be started, create virtual env and install required packages if no env exists
 IF EXIST %ENVDIR%\Scripts\activate ( SET RUN_ENV="true" )
@@ -17,4 +17,4 @@ IF %RUN_ENV%=="true" (
 )
 
 :: Start PYTHON_PROGRAM from a new command window
-START %WINDOW_TITLE% cmd.exe /k "cd %PYTHON_PROG_DIR% && python %PYTHON_PROGRAM% && timeout /t %WINDOW_TIMEOUT% && exit /b"
+START %WINDOW_TITLE% cmd.exe /k "cd %PYTHON_PROG_DIR% && pyinstaller %PYTHON_PROGRAM% --onefile -c && cd dist && rename pavlovupdater_gui.exe PyPavlovUpdater_GUI.exe && timeout /t %WINDOW_TIMEOUT% && exit /b"
