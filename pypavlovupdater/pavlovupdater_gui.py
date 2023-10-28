@@ -6,10 +6,19 @@ import os
 import io
 from PIL import Image
 import requests
+import logging
 
 
 major_vers = 1
-minor_vers = 1
+minor_vers = 2
+
+logging.basicConfig(filename="pypavlovupdater.log",	
+					format='%(asctime)s %(message)s', 
+					filemode='w+')
+logger = logging.getLogger()
+
+logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.ERROR)
 
 ### a few sets of functions to minimize the amount of API calls ###
 # globally defined subscribed mod array 
@@ -20,8 +29,10 @@ def update_subscribed_mods(pvu):
 	subscribed_mods = pvu.get_subscribed_modlist()
 	if 'error' in subscribed_mods:
 		if '401' in subscribed_mods:
+			logger.error('Error 401 when getting subscribed mods, API key rejected')
 			sg.Popup('Could not get subscribed mods, API key was rejected', non_blocking=True, keep_on_top =True)
 		else:
+			logger.error(f'Error when getting subscribed mods: {subscribed_mods.strip("error")}')
 			sg.Popup(f'Could not get subscribed mods, Error code {subscribed_mods.strip("error")}', non_blocking=True, keep_on_top =True)
 		subscribed_mods = None
 # function to get modlist without defining global
@@ -92,6 +103,7 @@ def make_mod_item_frame(pvu, mod):
 			except Exception as e:
 				# default to a pysimplegui emoji
 				print(e)
+				logger.exception(f'Exception when making mod item frame')
 				logo_faddr = sg.EMOJI_BASE64_HAPPY_THUMBS_UP
 
 		# resize the image and load it into the global dict
@@ -257,7 +269,7 @@ def make_download_window(pvu):
 
 
 # make settings manager object for use later
-cm = settings_manager.Conf_Manager('PPU.conf')
+cm = settings_manager.Conf_Manager('PPU.conf', logger)
 
 # function to load settings from settings manager
 def load_settings():
@@ -374,6 +386,7 @@ def mainmenu(settings, pvu):
 				sg.Popup("You are running an outdated version of PyPavlovUpdater.\nYou can download a new version from https://github.com/TotalJTM/PyPavlovUpdater/releases", 
 				title = 'Out of Date', non_blocking = True, keep_on_top = True)
 	except:
+		logger.exception(f'Exception when gettin latest program version')
 		pass
 
 	# make all variables for the window
@@ -436,6 +449,7 @@ def mainmenu(settings, pvu):
 		try:
 			window, event, values = sg.read_all_windows(timeout=100)
 		except Exception as e:
+			logger.exception(f'Exception when reading windows')
 			print(f'Closed with error: {e}')
 			break
 
@@ -454,6 +468,7 @@ def mainmenu(settings, pvu):
 				break
 			# handle button events to open windows
 			elif event == '__button_open_options_window__' and options_window == None:
+				settings = load_settings()
 				options_window = make_options_window(settings)
 			elif event == '__button_open_download_window__' and download_window == None:
 				try:
@@ -525,6 +540,7 @@ def mainmenu(settings, pvu):
 								sg.popup(f'Could not continue installing mod {nv[2]}, error:\n{success}', non_blocking = True, title = 'Download Error Popup', keep_on_top = True)
 
 				except Exception as e:
+					logger.exception(f'Exception in downloading menu')
 					print(f'error occured {e}')
 				finally:
 					# update the installed modlist
@@ -627,12 +643,13 @@ def mainmenu(settings, pvu):
 
 if __name__ == "__main__":
 	print(f'PyPavlovUpdater GUI Version {major_vers}.{minor_vers}')
+	logger.info(f'Version {major_vers}.{minor_vers}')
 
 	# load saved settings
 	settings = load_settings()
 
 	# create pavlov updater object from saved settings
-	pavlov_updater = pavlovupdater.PavlovUpdater(settings['pavlov_mod_dir_path'], settings['modio_api_token'])
+	pavlov_updater = pavlovupdater.PavlovUpdater(settings['pavlov_mod_dir_path'], settings['modio_api_token'], logger)
 	try:
 		# launch gui main menu
 		while True:
@@ -642,4 +659,5 @@ if __name__ == "__main__":
 			else:
 				break
 	except Exception as e:
-		sg.Popup('Program encountered error:\n   {e}\nPlease report this error', title='Program Error')
+		logger.exception(f'Exception in main loop')
+		sg.Popup(f'Program encountered an error.\nPlease report this error by making an issue on the Github repo and attaching the log file in executable directory.', title='Program Error')

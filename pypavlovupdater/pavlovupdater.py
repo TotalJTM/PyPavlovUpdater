@@ -6,20 +6,21 @@ import zipfile
 import hashlib
 
 major_vers = 1
-minor_vers = 1
+minor_vers = 2
 
 class PavlovUpdater:
 	# need to initialize the class with:
 	#	pavlov_mod_dir_path = path to the pavlov mod directory
 	#	modio_api_token = Mod.io API token this program will use to read+write data from/to the Mod.io API
 	# API tokens can be acquired from Mod.IO on the "https://mod.io/me/access" page
-	def __init__(self, pavlov_mod_dir_path, modio_api_token) -> None:
+	def __init__(self, pavlov_mod_dir_path, modio_api_token, logging_obj) -> None:
 		self.pavlov_mod_dir_path = pavlov_mod_dir_path
 		self.pavlov_gameid = '3959'
 		# self.settings_path = ''
 		self.modio_api_url = 'https://api.mod.io/v1'
 		self.modio_api_token = modio_api_token
 		self.target_os = 'windows'
+		self.logger = logging_obj
 
 	# make a get request to modio
 	#	route = address to make request at (ex. games/3959/mods)
@@ -36,6 +37,7 @@ class PavlovUpdater:
 			d = response.json()
 			if 'error' in d.keys():
 				print(f"Error code {d['error']['code']}, {d['error']['message']}")
+				self.logger.error(f"response containted error {d['error']['code']}, {d['error']['message']}")
 				return f"error{d['error']['code']}"
 
 		if ret_json:
@@ -56,6 +58,7 @@ class PavlovUpdater:
 			d = response.json()
 			if 'error' in d.keys():
 				print(f"Error code {d['error']['code']}, {d['error']['message']}")
+				self.logger.error(f"response containted error {d['error']['code']}, {d['error']['message']}")
 				return f"error{d['error']['code']}"
 
 		if ret_json:
@@ -231,12 +234,18 @@ class PavlovUpdater:
 					version = None
 					try:
 						with open(os.path.join(path, folder, 'taint'), 'r') as t:
-							version = int(t.read())
+							text = t.read()
+							if text != '':
+								version = int(text)
+							else:
+								continue
 
 						if version != None:
 							mods[ugc] = version
 
 					except:
+						self.logger.exception(f'Exception when getting installed mods')
+						self.logger.error(f'Occured with mod {ugc}')
 						continue
 
 		return mods
@@ -276,7 +285,9 @@ class PavlovUpdater:
 			# use a context manager to make an HTTP request and file
 			import sys, time
 			head = {'Authorization': f'Bearer {self.modio_api_token}', 'Accept': 'application/json'}
-			print(f'Making request to Mod.io')
+			
+			if code_to_run_during_download == None:
+				print(f'Making request to Mod.io')
 
 			temp_name = None
 			# make the request
@@ -339,6 +350,7 @@ class PavlovUpdater:
 							# print(f'{path}/{f}')
 							os.rmdir(f'{path}/{f}')
 				except Exception as e:
+					self.logger.exception(f'Exception when removing mod folders')
 					print(f'Skipped removing dir items : {e}')
 					
 			# if the directory doesnt exist, make the directory
@@ -361,6 +373,7 @@ class PavlovUpdater:
 			return True
 		
 		except Exception as e:
+			self.logger.exception(f'Exception installing mod')
 			print(e)
 			print(f'Could not install mod, skipping')
 			return e
@@ -451,13 +464,23 @@ class PavlovUpdater:
 			pass
 
 if __name__ == "__main__":
+	import logging
+
+	logging.basicConfig(filename="pypavlovupdater.log",	
+					format='%(asctime)s %(message)s', 
+					filemode='w+')
+	logger = logging.getLogger()
+
+	logger.setLevel(logging.DEBUG)
+	# logger.setLevel(logging.ERROR)
+
 	print(f'PyPavlovUpdater Version {major_vers}.{minor_vers}\n')
 
 	# use the configuration manager to load configuration variables from the .conf file
 	import settings_manager
 
 	conf_dict = None
-	cm = settings_manager.Conf_Manager('PPU.conf')
+	cm = settings_manager.Conf_Manager('PPU.conf', logger)
 	if os.path.exists('PPU.conf'):
 		conf_dict = cm.get_file_conts_as_dict()
 
@@ -489,6 +512,7 @@ if __name__ == "__main__":
 					print(f'Invalid API token input')
 					modio_api_token_input = None
 		except:
+			logger.exception(f'Exception when attempting to get token')
 			print(f'Canceled attempt to enter API token')
 	else:
 		api_ok = True
@@ -507,7 +531,8 @@ if __name__ == "__main__":
 					print(f'Invalid Pavlov directory input')
 					pavlov_mod_dir_path_input = None
 		except:
-			print(f'Canceled attempt to enter API token')
+			logger.exception(f'Exception when attempting to get mod path')
+			print(f'Canceled attempt to enter mod path')
 	else:
 		dir_ok = True
 
@@ -519,7 +544,7 @@ if __name__ == "__main__":
 	# check if there is an API string and mod directory path
 	if api_ok and dir_ok:
 		# create pavlov updater object
-		pu = PavlovUpdater(pavlov_mod_dir_path=conf_dict['pavlov_mod_dir_path'], modio_api_token=conf_dict['modio_api_token'])
+		pu = PavlovUpdater(pavlov_mod_dir_path=conf_dict['pavlov_mod_dir_path'], modio_api_token=conf_dict['modio_api_token'], logging_obj=logger)
 		# get all subscribed modes
 		print(f'Updating subscribed mods')
 		pu.update_subscribed_mods()

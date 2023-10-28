@@ -1,9 +1,11 @@
 env
+PPU.conf
+local
+pypavlovupdater.log
 pypavlovupdater/dev
 pypavlovupdater/__pycache__
 pypavlovupdater/build
 pypavlovupdater/dist
 pypavlovupdater/fresh_files
 pypavlovupdater/*.spec
-PPU.conf
-local
+pypavlovupdater/pypavlovupdater.log
