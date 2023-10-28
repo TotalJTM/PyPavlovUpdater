@@ -2,8 +2,9 @@
 # Configuration manager class to process configuration file
 # Used to read program settings from a configuration file that can be updated by the user from text editor
 class Conf_Manager:
-	def __init__(self, fileaddr) -> None:
+	def __init__(self, fileaddr, logging_ob) -> None:
 		self.fileaddr = fileaddr
+		self.logger = logging_ob
 	
 	# strip the additional characters from the values assigned to a variable (generates an array)
 	def process_varconts(self, data):
@@ -34,6 +35,7 @@ class Conf_Manager:
 						d['pavlov_mod_dir_path'] = self.process_varconts(varcont)[0]
 			return d
 		except:
+			self.logger.exception(f'Exception when processing file')
 			return None
 	
 	# create a new configuration file 
