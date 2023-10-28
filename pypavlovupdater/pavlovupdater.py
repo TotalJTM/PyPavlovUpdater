@@ -6,7 +6,7 @@ import zipfile
 import hashlib
 
 major_vers = 1
-minor_vers = 0
+minor_vers = 1
 
 class PavlovUpdater:
 	# need to initialize the class with:
@@ -36,7 +36,7 @@ class PavlovUpdater:
 			d = response.json()
 			if 'error' in d.keys():
 				print(f"Error code {d['error']['code']}, {d['error']['message']}")
-				return None
+				return f"error{d['error']['code']}"
 
 		if ret_json:
 			return d
@@ -56,7 +56,7 @@ class PavlovUpdater:
 			d = response.json()
 			if 'error' in d.keys():
 				print(f"Error code {d['error']['code']}, {d['error']['message']}")
-				return None
+				return f"error{d['error']['code']}"
 
 		if ret_json:
 			return d
@@ -92,8 +92,8 @@ class PavlovUpdater:
 	def get_pavlov_modlist(self):
 		mods = []
 		init_resp = self.modio_get(f'games/{self.pavlov_gameid}/mods')
-		if init_resp == None:
-				return None
+		if 'error' in init_resp:
+			return init_resp
 		
 		# create a dict to enter into the mods folder
 		def make_entry(m):
@@ -140,8 +140,8 @@ class PavlovUpdater:
 		for i in range(1,total_pages):
 			# get new response (but paginated)
 			resp = self.modio_get(f'games/{self.pavlov_gameid}/mods?_offset={int(i*100)}')#?game-id={self.pavlov_gameid}
-			if resp == None:
-				return None
+			if 'error' in resp:
+				return resp
 			# go through response and make/add entrys to the mods arr
 			for m in resp['data']:
 				entry = make_entry(m)
@@ -157,8 +157,8 @@ class PavlovUpdater:
 		mods = []
 		# get initial subscribed mods for pavlov (first 100 entrys)
 		init_resp = self.modio_get(f'me/subscribed?game_id={self.pavlov_gameid}')
-		if init_resp == None:
-				return None
+		if 'error' in init_resp:
+			return init_resp
 		# print(init_resp)
 
 		# create a dict to enter into the mods folder
@@ -206,8 +206,8 @@ class PavlovUpdater:
 		for i in range(1,total_pages):
 			# get new response (but paginated)
 			resp = self.modio_get(f'me/subscribed?game_id={self.pavlov_gameid}&_offset={int(i*100)}')#?game-id={self.pavlov_gameid}
-			if resp == None:
-				return None
+			if 'error' in resp:
+				return resp
 			# go through response and make/add entrys to the mods arr
 			for m in resp['data']:
 				entry = make_entry(m)
@@ -254,8 +254,8 @@ class PavlovUpdater:
 
 			# get mod file information
 			resp = self.modio_get(f'games/3959/mods/{ugc}/files/{version}')
-			if resp == None:
-				return None
+			if 'error' in resp:
+				return resp
 			
 			# got file info
 			# code to support gui
@@ -266,29 +266,6 @@ class PavlovUpdater:
 			if resp['virus_positive'] != 0:
 				print(f'Virus detected, skipping')
 				return None
-
-			# check if the mod directory exists
-			if os.path.exists(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
-				# iter through the UGC folder to delete files/folders
-				try:
-					for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data'):
-						for f in files:
-							# print(f'{path}/{f}')
-							os.remove(f'{path}/{f}')
-					for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
-						for f in files:
-							# print(f'{path}/{f}')
-							os.remove(f'{path}/{f}')
-						for f in folders:
-							# print(f'{path}/{f}')
-							os.rmdir(f'{path}/{f}')
-				except Exception as e:
-					print(f'Skipped removing dir items : {e}')
-			# if the directory doesnt exist, make the directory
-			else:
-				os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
-			# make the Data directory
-			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
 
 			# made dir
 			# code to support gui
@@ -346,6 +323,29 @@ class PavlovUpdater:
 			if code_to_run_during_download != None: 
 				code_to_run_during_download(100.0)
 
+			# check if the mod directory exists
+			if os.path.exists(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
+				# iter through the UGC folder to delete files/folders
+				try:
+					for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data'):
+						for f in files:
+							# print(f'{path}/{f}')
+							os.remove(f'{path}/{f}')
+					for path, folders, files in os.walk(f'{self.pavlov_mod_dir_path}/UGC{ugc}'):
+						for f in files:
+							# print(f'{path}/{f}')
+							os.remove(f'{path}/{f}')
+						for f in folders:
+							# print(f'{path}/{f}')
+							os.rmdir(f'{path}/{f}')
+				except Exception as e:
+					print(f'Skipped removing dir items : {e}')
+					
+			# if the directory doesnt exist, make the directory
+			else:
+				os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
+			# make the Data directory
+			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
 
 			# unzip the downloaded file and place it in the Data directory
 			with zipfile.ZipFile(temp_name, 'r') as z:
@@ -357,9 +357,13 @@ class PavlovUpdater:
 			# open the 'taint' file and write the new version
 			with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
 				f.write(f'{version}')
+
+			return True
+		
 		except Exception as e:
 			print(e)
 			print(f'Could not install mod, skipping')
+			return e
 
 	# find miscomparisons between modio latest mod versions and installed mod versions
 	#	subscribed_list = list of subscribed mod files (expects output from get_subscribed_modlist())
@@ -403,10 +407,19 @@ class PavlovUpdater:
 	def update_subscribed_mods(self):
 		# get list of subscribed mods
 		subs_list = self.get_subscribed_modlist()
-		print(f"=== There are {len(subs_list)} subscribed mods ===")
+		if 'error' not in subs_list:
+			print(f"=== There are {len(subs_list)} subscribed mods ===")
+		else:
+			print('Could not get subscribed mods')
+			os._exit(1)
 
 		# get list of installed mods
 		installed_mods = self.get_installed_modlist()
+		if len(installed_mods) > 0:
+			print(f"=== There are {len(subs_list)} subscribed mods ===")
+		else:
+			print('Could not get installed mods')
+			os._exit(1)
 
 		# find mods that are 1) not latest version, 2) not installed, 3) installed but not subscribed
 		miscompares, not_installed, not_subscribed = self.find_miscompares_in_modlists(subs_list, installed_mods)
@@ -435,8 +448,7 @@ class PavlovUpdater:
 			for modid in not_subscribed:
 				print(f'-- Subscribing to UGC{modid} --')
 				resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{modid}/subscribe')
-			pass 
-
+			pass
 
 if __name__ == "__main__":
 	print(f'PyPavlovUpdater Version {major_vers}.{minor_vers}\n')
