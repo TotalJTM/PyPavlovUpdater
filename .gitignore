@@ -4,6 +4,6 @@ pypavlovupdater/__pycache__
 pypavlovupdater/build
 pypavlovupdater/dist
 pypavlovupdater/fresh_files
-pypavlovupdater/pavlovupdater_gui.spec
+pypavlovupdater/*.spec
 PPU.conf
 local

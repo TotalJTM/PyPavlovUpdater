@@ -1,5 +1,5 @@
 # PyPavlovUpdater
-Python program to update and subscribe to Pavlov mods. 
+Python program to update and subscribe to Pavlov-VR mods. 
 <br><br><br>
 This program does 3 things:
 1) Check the users subscribed mods against the installed mods, then update out of date mods
@@ -17,7 +17,7 @@ The CLI interface can be launched by running `update_pavlov_mods_cli.bat`. The p
 The program will then get the users subscribed Pavlov mods from Mod.io, get the locally installed mods from the Pavlov mod folder, and compare the two lists against eachother. When out-of-date mods or not installed are detected, the mods are automatically downloaded. When a mod that is downloaded but not subscribed to is detected, the mod is automatically subscribed to. 
 
 ### GUI Interface
-The GUI interface can be launched by running `run_pavlovupdater_gui.bat` or by opening the `PyPavlovUpdater.exe` executable. The user will need to enter the same API token and mod folder directory listed above into the Options Menu. The user can then press the 'Open Download Menu' button to download uninstalled or outdated mods, or by pressing the 'Open Subscribed Mod Manager' to view subscribed mod data (work in progress).
+The GUI interface can be launched by running `run_pavlovupdater_gui.bat` or by opening the `PyPavlovUpdater.exe` executable. The user will need to enter the same API token and mod folder directory listed above into the Options Menu. The user can then press the 'Open Download Menu' button to download uninstalled or outdated mods, or by pressing the 'Open Subscribed Mod Manager' to view subscribed mod data.
 
 #### Building the GUI Interface
 The GUI is built using pyinstaller. To rebuild the GUI from python, use the `make_pavlovupdater_gui_exe.bat` script and get the executable from pavlovupdater/dist

@@ -16,5 +16,8 @@ IF %RUN_ENV%=="true" (
     IF EXIST %ENVDIR%\requirements.txt ( pip install -r requirements.txt )
 )
 
+:: pyinstaller args
+SET PYINSTALLER_ARGS=pyinstaller %PYTHON_PROGRAM% --onefile -c --name PyPavlovUpdater_GUI.exe
+
 :: Start PYTHON_PROGRAM from a new command window
-START %WINDOW_TITLE% cmd.exe /k "cd %PYTHON_PROG_DIR% && pyinstaller %PYTHON_PROGRAM% --onefile -c && cd dist && rename pavlovupdater_gui.exe PyPavlovUpdater_GUI.exe && timeout /t %WINDOW_TIMEOUT% && exit /b"
+START %WINDOW_TITLE% cmd.exe /k "cd %PYTHON_PROG_DIR% && %PYINSTALLER_ARGS% && timeout /t %WINDOW_TIMEOUT% && exit /b"

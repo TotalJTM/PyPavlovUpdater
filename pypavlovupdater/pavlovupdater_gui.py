@@ -5,24 +5,31 @@ from datetime import datetime
 import os
 import io
 from PIL import Image
+import requests
 
 
 major_vers = 1
-minor_vers = 0
+minor_vers = 1
 
 ### a few sets of functions to minimize the amount of API calls ###
 # globally defined subscribed mod array 
-subscribbed_mods = None
+subscribed_mods = None
 # function to update modlist
 def update_subscribed_mods(pvu):
-	global subscribbed_mods
-	subscribbed_mods = pvu.get_subscribed_modlist()
+	global subscribed_mods
+	subscribed_mods = pvu.get_subscribed_modlist()
+	if 'error' in subscribed_mods:
+		if '401' in subscribed_mods:
+			sg.Popup('Could not get subscribed mods, API key was rejected', non_blocking=True, keep_on_top =True)
+		else:
+			sg.Popup(f'Could not get subscribed mods, Error code {subscribed_mods.strip("error")}', non_blocking=True, keep_on_top =True)
+		subscribed_mods = None
 # function to get modlist without defining global
 def get_subscribed_mods(pvu):
-	global subscribbed_mods
-	if subscribbed_mods == None:
+	global subscribed_mods
+	if subscribed_mods == None:
 		update_subscribed_mods(pvu)
-	return subscribbed_mods
+	return subscribed_mods
 
 # globally defined insatlled mod array 
 installed_mods = None
@@ -30,6 +37,8 @@ installed_mods = None
 def update_installed_mods(pvu):
 	global installed_mods
 	installed_mods = pvu.get_installed_modlist()
+	if len(installed_mods) == 0:
+		sg.Popup('Could not find installed mods, check that mod directory is valid. Disregard if intentional.', non_blocking=True, keep_on_top =True)
 # function to get modlist without defining global
 def get_installed_mods(pvu):
 	global installed_mods
@@ -44,6 +53,8 @@ not_subscribed = None
 # function to update modlists
 def update_miscompares(pvu):
 	global miscompares, not_installed, not_subscribed
+
+	# if len(not_installed) != 0 and 
 	miscompares, not_installed, not_subscribed = pvu.find_miscompares_in_modlists(get_subscribed_mods(pvu), get_installed_mods(pvu), printout=False)
 # function to get modlists without defining global
 def get_miscompares(pvu):
@@ -54,11 +65,13 @@ def get_miscompares(pvu):
 
 
 ### GUI functions ###
+popup_title = 'PyPavlovUpdater Popup'
 # global dict to hold created images (so they dont have to get loaded again)
 image_bios = {}
+download_popup_occured = False
 # define the layout for mod lists
 def make_mod_item_frame(pvu, mod):
-	global image_bios
+	global image_bios, download_popup_occured
 	# make locals folder to store mod thumbnails
 	if not os.path.exists('local'):
 		os.mkdir('local')
@@ -67,6 +80,10 @@ def make_mod_item_frame(pvu, mod):
 		# make an address, check if it exists
 		logo_faddr = f'local/UGC{mod["id"]}_logo.png'
 		if not os.path.exists(logo_faddr):
+			if not download_popup_occured:
+				download_popup_occured = True
+				sg.Popup('Downloading image thumbnails, this may take a bit', non_blocking = True, keep_on_top = True, title = 'Settings Error')
+
 			try:
 				# download an image and write it to faddr
 				image_bin = pvu.get_modio_image(mod['logo'])
@@ -121,7 +138,8 @@ def make_sub_mod_window(pvu, mod_filter=None):
 	# get list of subscribed mods
 	mods = get_subscribed_mods(pvu)
 	if mods == None:
-		return [[sg.Text('Could not get subscribed mod list')]]
+		return sg.Window(f'Subscribed Mods', [[sg.Text('Could not get subscribed mod list')]], finalize=True)
+		
 
 	# get list of installed mods
 	installed_mods = get_installed_mods(pvu)
@@ -165,8 +183,8 @@ def make_sub_mod_window(pvu, mod_filter=None):
 def make_download_window(pvu):
 	subbed_mods = get_subscribed_mods(pvu)
 	if subbed_mods == None:
-		return [[sg.Text('Could not get subscribed mod list')]]
-
+		return sg.Window(f'Download Menu', [[sg.Text('Could not open download menu')]], finalize=True)
+		
 	# get list of installed mods
 	installed_mods = get_installed_mods(pvu)
 
@@ -203,13 +221,13 @@ def make_download_window(pvu):
 		return sg.Column(new)
 	
 	# layout the checkbox column (with formatted keys for event/value handling)
-	checkbox_col_layout = [[sg.Text('Download?')]]
+	checkbox_col_layout = [[sg.Text('Download?', pad=(10,1))]]
 	for i, ugc in enumerate(ugc_col):
 		# hack so I can use the array for table headers
 		if i==0:
 			continue
 		k = f'__cbox_download_UGC{ugc}_{modfile_id[i]}__'
-		checkbox_col_layout.append([sg.CBox('', key=k)])
+		checkbox_col_layout.append([sg.CBox('', key=k, pad=(10,0.5))])
 	
 	# start the larger download menu assembly
 	assembled_layout = [
@@ -287,16 +305,30 @@ def make_options_window(sets):
 
 	# help text for options window
 	help_text = """This program does 3 things:
-\t1) Check the users subscribed mods against the installed mods, then update out of date mods
-\t2) Install mods that are subscribed to but not installed
-\t3) Subscribe to any mod that is installed but not currently subscribed to.
+        1) Check the users subscribed mods against the installed mods, then update out of date mods
+        2) Install mods that are subscribed to but not installed
+        3) Subscribe to any mod that is installed but not currently subscribed to.
 
-This GUI tool can be used to perform all of the above functionality."""
+The following settings are needed to use this program:
+        Pavlov Mod Directory Path: the path to the downloaded Pavlov mods folder
+        Mod.io API Key: acquired from "https://mod.io/me/access" (read+write) then copied into the modio_api_token variable
+Enter these values in the input fields below.
+
+A 'PPU.conf' file and a 'local' folder (that will be filled with images) will be created through the use of this program.
+    Please keep the executable with these items or program settings/downloaded mod thumbnails will need to be 
+    reentered/redownloaded.
+		
+If you run into issues using this program, please let me know through the following:
+        Github Repo Issue Page: https://github.com/TotalJTM/PyPavlovUpdater/issues
+        Email: totaljtm@gmail.com
+     
+You can also find me on the Pavlov Push Discord: https://discord.gg/3ngWgM4TwA
+"""
 	# return full layout
 	assembled_layout = [  
 		[sg.Text('PyPavlovUpdater Program', justification='center', expand_x=True, font=15)],
 		[sg.HorizontalSeparator()],
-		[sg.Text(help_text)],
+		[sg.Text(help_text, enable_events=True)],
 		[sg.HorizontalSeparator()],
 		[sg.Text('PyPavlovUpdater Settings', justification='center', expand_x=True, font=15)],
 		[sg.HorizontalSeparator()],
@@ -315,9 +347,34 @@ def make_downloading_window():
 		[sg.ProgressBar(100, orientation='h', size=(20,20), key='__progress_bar__')]
 	]
 
+# get the latest version number of this program from github
+def get_latest_program_version():
+	resp = requests.get("https://api.github.com/repos/TotalJTM/PyPavlovUpdater/releases/latest")
+	if resp.status_code == 200:
+		name = resp.json()["tag_name"]
+		if 'V' in name:
+			maj, min = name.strip('V').split('_')
+			return maj, min
+		return None, None
+
 # main menu for the pavlov mod updater
 def mainmenu(settings, pvu):
 	sg.theme('DefaultNoMoreNagging')
+
+	# attempt to check the latest version of the program from the github release tag
+	try:
+		lat_maj, lat_min = get_latest_program_version()
+		not_latest_vers = True
+		if lat_maj != None:
+			if int(lat_maj) == major_vers:
+				if int(lat_min) == minor_vers:
+					not_latest_vers = False
+			
+			if not_latest_vers:
+				sg.Popup("You are running an outdated version of PyPavlovUpdater.\nYou can download a new version from https://github.com/TotalJTM/PyPavlovUpdater/releases", 
+				title = 'Out of Date', non_blocking = True, keep_on_top = True)
+	except:
+		pass
 
 	# make all variables for the window
 	options_window = None
@@ -349,7 +406,7 @@ def mainmenu(settings, pvu):
 
 	# define the program layout
 	layout = [
-		[sg.Text(f'You have {len(installed_mods)} Pavlov mods installed')],
+		[sg.Text(f'You have {len(installed_mods)} Pavlov mods installed', key='__pavlov_installed_text__')],
 		[sg.HorizontalSeparator()],
 		[sg.Button(f'Open Options Menu', key='__button_open_options_window__', expand_x=True)],
 		[sg.Button(f'Open Download Menu', key='__button_open_download_window__', expand_x=True)],
@@ -358,6 +415,20 @@ def mainmenu(settings, pvu):
 
 	# create the main window instance for the app
 	main_window = sg.Window(f'PyPavlovUpdater V{major_vers}.{minor_vers}', layout, resizable=True, finalize=True) #finalize=True,size=winsize,
+
+	# check that the settings exist, prompt user to fill them out otherwise
+	bad_settings = []
+	if pvu.pavlov_mod_dir_path == '':
+		bad_settings.append('Pavlov Mod Directory Path')
+	if pvu.modio_api_token == '':
+		bad_settings.append('Mod.io API Key')
+
+	if len(bad_settings) != 0:
+		text = 'The following settings need to be updated:\n'
+		for set in bad_settings:
+			text += f' - {set}\n'
+		text += 'Use the Options Menu to set these settings, then you can download mods'
+		sg.Popup(text, non_blocking = True, keep_on_top = True, title = 'Settings Error')
 
 	# main gui loop
 	while True:
@@ -385,7 +456,10 @@ def mainmenu(settings, pvu):
 			elif event == '__button_open_options_window__' and options_window == None:
 				options_window = make_options_window(settings)
 			elif event == '__button_open_download_window__' and download_window == None:
-				download_window = make_download_window(pvu)
+				try:
+					download_window = make_download_window(pvu)
+				except:
+					print('exceptions')
 			elif event == '__button_open_subscribed_window__' and subscribed_window == None:
 				subscribed_window = make_sub_mod_window(pvu)
 
@@ -405,6 +479,27 @@ def mainmenu(settings, pvu):
 				# update PavlovUpdater object with updated settings
 				pvu.pavlov_mod_dir_path = mod_dir
 				pvu.modio_api_token = api_key
+				# update the installed modlist
+				update_installed_mods(pvu)
+				good_settings = []
+				# check if modlist is empty (could indicate wrong path)
+				if len(instmods := get_installed_mods(pvu)) == 0:
+					sg.Popup('The mod directory you have selected contains 0 detected Pavlov mods.', keep_on_top = True, title = 'Settings Error')
+				else:
+					good_settings.append('Pavlov Mod Directory Path')
+					main_window['__pavlov_installed_text__'].update(f'You have {len(instmods)} Pavlov mods installed')
+				# check if the api key is valid by doing a simple modio request
+				resp = pvu.modio_get('me', ret_json=False)
+				if resp.status_code != 200:
+					sg.Popup('The Mod.io API key you entered is not valid.', keep_on_top = True, title = 'Settings Error')
+				else:
+					good_settings.append('Mod.io API Key')
+
+				if good_settings:
+					text = 'The following settings are valid and saved:\n'
+					for set in good_settings:
+						text+=f' - {set}\n'
+					sg.Popup(text, keep_on_top = True, title = 'Settings Saved')
 
 		# handle download window events
 		elif window == download_window:
@@ -425,10 +520,16 @@ def mainmenu(settings, pvu):
 							# update the ugc text field in the downloading window
 							downloading_window['__text_ugc__'].update(nv[2].strip('UGC'))
 							# download the mod (provide callback so this function can update the window without recreating download here)
-							pvu.download_modio_file(int(nv[2].strip('UGC')), int(nv[3]), code_to_run_during_download=download_window_func)
+							success = pvu.download_modio_file(int(nv[2].strip('UGC')), int(nv[3]), code_to_run_during_download=download_window_func)
+							if success != True:
+								sg.popup(f'Could not continue installing mod {nv[2]}, error:\n{success}', non_blocking = True, title = 'Download Error Popup', keep_on_top = True)
+
 				except Exception as e:
 					print(f'error occured {e}')
 				finally:
+					# update the installed modlist
+					update_installed_mods(pvu)
+					main_window['__pavlov_installed_text__'].update(f'You have {len(get_installed_mods(pvu))} Pavlov mods installed')
 					# close the window since downloading has finished
 					downloading_window.close()
 
@@ -474,12 +575,12 @@ def mainmenu(settings, pvu):
 					success = 0
 					not_success = []
 					for ugc in not_subscribed:
-						resp = pvu.modio_post(f'games/{pvu.pavlov_gameid}/mods/{ugc}/subscribe')
+						resp = pvu.modio_post(f'games/{pvu.pavlov_gameid}/mods/{ugc}/subscribe', ret_json=False)
 						if resp:
 							if resp.status_code == 201:
 								success += 1
 								continue
-						not_success.append(f'UGC{ugc}')
+						not_success.append(f' - UGC{ugc}')
 					
 					if len(not_success) == 0:
 						popup_text = f'Successfully subscribed to {success} mods'
@@ -503,7 +604,7 @@ def mainmenu(settings, pvu):
 
 				# do the popup if the object changed
 				if popup_text != None:
-					sg.popup_ok(popup_text, title='Subscribed Mod Popup')
+					sg.popup_ok(popup_text, title='Subscribed Mod Popup', non_blocking=True, keep_on_top =True)
 
 			# unsub from a mod and unhide the subscribe button
 			elif '__button_unsub_' in event:
@@ -532,11 +633,13 @@ if __name__ == "__main__":
 
 	# create pavlov updater object from saved settings
 	pavlov_updater = pavlovupdater.PavlovUpdater(settings['pavlov_mod_dir_path'], settings['modio_api_token'])
-	
-	# launch gui main menu
-	while True:
-		ret = mainmenu(settings, pavlov_updater)
-		if ret == 'continue':
-			continue
-		else:
-			break
+	try:
+		# launch gui main menu
+		while True:
+			ret = mainmenu(settings, pavlov_updater)
+			if ret == 'continue':
+				continue
+			else:
+				break
+	except Exception as e:
+		sg.Popup('Program encountered error:\n   {e}\nPlease report this error', title='Program Error')
