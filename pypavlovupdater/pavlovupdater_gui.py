@@ -10,15 +10,15 @@ import logging
 
 
 major_vers = 1
-minor_vers = 2
+minor_vers = 3
 
 logging.basicConfig(filename="pypavlovupdater.log",	
 					format='%(asctime)s %(message)s', 
 					filemode='w+')
 logger = logging.getLogger()
 
-logger.setLevel(logging.DEBUG)
-# logger.setLevel(logging.ERROR)
+# logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 
 ### a few sets of functions to minimize the amount of API calls ###
 # globally defined subscribed mod array 
@@ -33,7 +33,7 @@ def update_subscribed_mods(pvu):
 			sg.Popup('Could not get subscribed mods, API key was rejected', non_blocking=True, keep_on_top =True)
 		else:
 			logger.error(f'Error when getting subscribed mods: {subscribed_mods.strip("error")}')
-			sg.Popup(f'Could not get subscribed mods, Error code {subscribed_mods.strip("error")}', non_blocking=True, keep_on_top =True)
+			sg.Popup(f'Could not get subscribed mods, Error {subscribed_mods.strip("error")}', non_blocking=True, keep_on_top =True)
 		subscribed_mods = None
 # function to get modlist without defining global
 def get_subscribed_mods(pvu):
@@ -49,6 +49,7 @@ def update_installed_mods(pvu):
 	global installed_mods
 	installed_mods = pvu.get_installed_modlist()
 	if len(installed_mods) == 0:
+		logger.error('No installed mods found')
 		sg.Popup('Could not find installed mods, check that mod directory is valid. Disregard if intentional.', non_blocking=True, keep_on_top =True)
 # function to get modlist without defining global
 def get_installed_mods(pvu):
@@ -64,9 +65,12 @@ not_subscribed = None
 # function to update modlists
 def update_miscompares(pvu):
 	global miscompares, not_installed, not_subscribed
-
+	subbed = get_subscribed_mods(pvu)
+	inst = get_installed_mods(pvu)
+	if subbed == None or inst == None:
+		return None, None, None
 	# if len(not_installed) != 0 and 
-	miscompares, not_installed, not_subscribed = pvu.find_miscompares_in_modlists(get_subscribed_mods(pvu), get_installed_mods(pvu), printout=False)
+	miscompares, not_installed, not_subscribed = pvu.find_miscompares_in_modlists(subbed, inst, printout=False)
 # function to get modlists without defining global
 def get_miscompares(pvu):
 	global miscompares, not_installed, not_subscribed
@@ -150,8 +154,7 @@ def make_sub_mod_window(pvu, mod_filter=None):
 	# get list of subscribed mods
 	mods = get_subscribed_mods(pvu)
 	if mods == None:
-		return sg.Window(f'Subscribed Mods', [[sg.Text('Could not get subscribed mod list')]], finalize=True)
-		
+		return sg.Window(f'Subscribed Mods', [[sg.Text('Could not get subscribed mod list')]], finalize=True, size=(350,75))
 
 	# get list of installed mods
 	installed_mods = get_installed_mods(pvu)
@@ -179,7 +182,7 @@ def make_sub_mod_window(pvu, mod_filter=None):
 
 	# make the larger subscribed mod window layout with the newly assembled mod layout
 	assembled_layout = [
-		[sg.Text(f'{len(mods)-len(miscompares)-len(not_installed)}/{len(mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'), 
+		[sg.Text(f'{len(mods)-len(miscompares)-len(not_installed)}/{len(mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'),
 			sg.Column([[]], expand_x=True), 
 			sg.Button('Subscribe to nonsubscribed-but-installed mods', key='__button_subto_installed__'),
 			sg.Button('Refresh Modlist', key='__button_subbed_refresh__'),],
@@ -195,7 +198,7 @@ def make_sub_mod_window(pvu, mod_filter=None):
 def make_download_window(pvu):
 	subbed_mods = get_subscribed_mods(pvu)
 	if subbed_mods == None:
-		return sg.Window(f'Download Menu', [[sg.Text('Could not open download menu')]], finalize=True)
+		return sg.Window(f'Download Menu', [[sg.Text('Could not open download menu')]], finalize=True, size=(350,75))
 		
 	# get list of installed mods
 	installed_mods = get_installed_mods(pvu)
@@ -243,7 +246,7 @@ def make_download_window(pvu):
 	
 	# start the larger download menu assembly
 	assembled_layout = [
-		[sg.Text(f'{len(subbed_mods)-len(miscompares)-len(not_installed)}/{len(subbed_mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed'), 
+		[sg.Text(f'{len(subbed_mods)-len(miscompares)-len(not_installed)}/{len(subbed_mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed'),
 			sg.Column([[]], expand_x=True), 
 			sg.Button('Refresh Page', key='__button_download_refresh__'),],
 		[sg.Button('Uncheck All', key='__button_download_uncheck_all__',expand_x=True),sg.Button('Check All', key='__button_download_check_all__',expand_x=True),sg.Button('Download Selected', key='__button_download_download__',expand_x=True)],
@@ -260,7 +263,7 @@ def make_download_window(pvu):
 	# if there are mods to download, add the table layout (in either a scrollable window or as elements)
 	if (len(miscompares)+len(not_installed)) != 0:
 		if len(ugc_col) >= 10:
-			assembled_layout.append([sg.Column([table_layout], expand_x=True, expand_y=True, scrollable=True, vertical_scroll_only=True)])
+			assembled_layout.append([sg.Column([table_layout], size=(800,500), expand_x=True, expand_y=True, scrollable=True)])
 		else:
 			assembled_layout.append(table_layout)
 
@@ -516,6 +519,11 @@ def mainmenu(settings, pvu):
 						text+=f' - {set}\n'
 					sg.Popup(text, keep_on_top = True, title = 'Settings Saved')
 
+					# close the menu if settings are valid
+					if len(good_settings) == 2:
+						options_window.close()
+						options_window = None
+
 		# handle download window events
 		elif window == download_window:
 			# handle closing window
@@ -531,6 +539,9 @@ def mainmenu(settings, pvu):
 					# find checked mods, isolate the ugc
 					for value in values:
 						if '__cbox_download' in value:
+							if values[value] == False:
+								continue
+
 							nv = value.strip('__').split('_')
 							# update the ugc text field in the downloading window
 							downloading_window['__text_ugc__'].update(nv[2].strip('UGC'))
