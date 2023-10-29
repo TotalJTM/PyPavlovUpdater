@@ -37,7 +37,6 @@ class PavlovUpdater:
 		if ret_json == True:
 			d = response.json()
 			if 'error' in d.keys():
-				# print(f"Error code {d['error']['code']}, {d['error']['message']}")
 				self.logger.error(f"response containted error {d['error']['code']}, {d['error']['message']}")
 				return f"error{d['error']['code']}"
 
@@ -59,7 +58,6 @@ class PavlovUpdater:
 		if ret_json == True:
 			d = response.json()
 			if 'error' in d.keys():
-				print(f"Error code {d['error']['code']}, {d['error']['message']}")
 				self.logger.error(f"response containted error {d['error']['code']}, {d['error']['message']}")
 				return f"error{d['error']['code']}"
 
@@ -78,7 +76,6 @@ class PavlovUpdater:
 		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
 		# send request
 		response = requests.delete(addr, params={}, headers=head)
-		# print(response)
 
 		return response
 	
@@ -89,7 +86,6 @@ class PavlovUpdater:
 		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
 		# send request
 		response = requests.get(route, params={}, headers=head)
-		# print(response)
 
 		if response.status_code != 200:
 			return None
@@ -296,7 +292,7 @@ class PavlovUpdater:
 
 			# check the virus status of the file
 			if resp['virus_positive'] != 0:
-				print(f'Virus detected, skipping')
+				logging.info(f'Virus detected, skipping')
 				return 'Virus detected by Mod.io in modfile'
 
 			# made dir
@@ -310,7 +306,7 @@ class PavlovUpdater:
 			head = {'Authorization': f'Bearer {self.modio_api_token}', 'Accept': 'application/json'}
 			
 			if code_to_run_during_download == None:
-				print(f'Making request to Mod.io')
+				logging.info(f'Making request to Mod.io')
 
 			# make the request
 			with requests.get(resp['download']['binary_url'], headers=head, stream=True) as r:
@@ -319,7 +315,7 @@ class PavlovUpdater:
 				if code_to_run_during_download != None:
 					code_to_run_during_download(0)
 				else:
-					print('Downloading mod')
+					logging.info('Downloading mod')
 
 				last_c = 1	# counter for gui update
 				last_std_write = 0 # counter for print() update
@@ -375,7 +371,7 @@ class PavlovUpdater:
 
 				except Exception as e:
 					self.logger.exception(f'Exception when removing mod folders')
-					print(f'Skipped removing dir items : {e}')
+					logging.info(f'Skipped removing dir items : {e}')
 
 			# check if the mod directory exists
 			if os.path.exists(ugc_path):
@@ -403,8 +399,8 @@ class PavlovUpdater:
 		
 		except Exception as e:
 			self.logger.exception(f'Exception installing mod')
-			print(e)
-			print(f'Could not install mod, skipping')
+			logging.info(e)
+			logging.info(f'Could not install mod, skipping')
 			# if transferring the file/writing taint file fails, remove the mod dir for clean install next time
 			remove_items_from_dir(ugc_path)
 			os.rmdir(ugc_path)
@@ -424,7 +420,7 @@ class PavlovUpdater:
 		subscribed_ids = []
 		# print table header and iter mods in subscribed_list
 		if printout:
-			print(f'Status     |  {"Map Name":50s}  | UGC        | Version (modio : installed)')
+			logging.info(f'Status     |  {"Map Name":50s}  | UGC        | Version (modio : installed)')
 		for item in subscribed_list:
 			# add id to subscribed ids (used for not_subscribe arr assembly)
 			subscribed_ids.append(item['id'])
@@ -433,15 +429,15 @@ class PavlovUpdater:
 				# compare the version from mod.io against the taint file version
 				if item['modfile']['id'] == installed_list[item['id']]:
 					if printout:
-						print(f'Up to date | "{item["name"]:50s}" | UGC{item["id"]} | {item["modfile"]["id"]} == {installed_list[item["id"]]}')
+						logging.info(f'Up to date | "{item["name"]:50s}" | UGC{item["id"]} | {item["modfile"]["id"]} == {installed_list[item["id"]]}')
 				else:
 					if printout:
-						print(f'Mismatch in id | "{item["name"]:46s}" | UGC{item["id"]} | {item["modfile"]["id"]} != {installed_list[item["id"]]}')
+						logging.info(f'Mismatch in id | "{item["name"]:46s}" | UGC{item["id"]} | {item["modfile"]["id"]} != {installed_list[item["id"]]}')
 					# add to miscompare arr since it is different from the latest version
 					miscompares.append(item)
 			else:
 				if printout:
-					print(f'Mod not installed | {" ":43s} | UGC{item["id"]}')
+					logging.info(f'Mod not installed | {" ":43s} | UGC{item["id"]}')
 				# add to not_installed arr since id is not installed
 				not_installed.append(item)
 		
@@ -460,27 +456,27 @@ class PavlovUpdater:
 		# get list of subscribed mods
 		subs_list = self.get_subscribed_modlist()
 		if 'error' not in subs_list:
-			print(f"=== There are {len(subs_list)} subscribed mods ===")
+			logging.info(f"=== There are {len(subs_list)} subscribed mods ===")
 		else:
-			print('Could not get subscribed mods')
+			logging.info('Could not get subscribed mods')
 			os._exit(1)
 
 		# get list of installed mods
 		installed_mods = self.get_installed_modlist()
 		if len(installed_mods) > 0:
-			print(f"=== There are {len(subs_list)} subscribed mods ===")
+			logging.info(f"=== There are {len(subs_list)} subscribed mods ===")
 		else:
-			print('Could not get installed mods')
+			logging.info('Could not get installed mods')
 			os._exit(1)
 
 		# find mods that are 1) not latest version, 2) not installed, 3) installed but not subscribed
 		miscompares, not_installed, not_subscribed = self.find_miscompares_in_modlists(subs_list, installed_mods)
 		
-		print(f'Miscompared: {len(miscompares)}, Not Installed: {len(not_installed)}, Not Subscribed: {len(not_subscribed)}')
+		logging.info(f'Miscompared: {len(miscompares)}, Not Installed: {len(not_installed)}, Not Subscribed: {len(not_subscribed)}')
 		
 		# if there are miscompares, download the latest version
 		if len(miscompares) > 0:
-			print(f'=== Updating out of date mods ===')
+			logging.info(f'=== Updating out of date mods ===')
 			for mod in miscompares:
 				print(f'-- Updating {mod["name"]} --')
 				self.download_modio_file(mod['id'], mod['modfile']['id']) 
@@ -488,17 +484,17 @@ class PavlovUpdater:
 
 		# if there are mods not installed, download the latest version
 		if len(not_installed) > 0:
-			print(f'=== Installing not-yet installed mods ===')
+			logging.info(f'=== Installing not-yet installed mods ===')
 			for mod in not_installed:
-				print(f'-- Installing {mod["name"]} --')
+				logging.info(f'-- Installing {mod["name"]} --')
 				self.download_modio_file(mod['id'], mod['modfile']['id']) 
 			pass 
 
 		# if there are mods downloaded but are not subscribed to, post subscription request
 		if len(not_subscribed) > 0:
-			print(f'=== Subscribing to not-yet subscribed mods ===')
+			logging.info(f'=== Subscribing to not-yet subscribed mods ===')
 			for modid in not_subscribed:
-				print(f'-- Subscribing to UGC{modid} --')
+				logging.info(f'-- Subscribing to UGC{modid} --')
 				resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{modid}/subscribe')
 			pass
 
@@ -513,7 +509,7 @@ if __name__ == "__main__":
 	logger.setLevel(logging.DEBUG)
 	# logger.setLevel(logging.ERROR)
 
-	print(f'PyPavlovUpdater Version {major_vers}.{minor_vers}\n')
+	logging.info(f'PyPavlovUpdater Version {major_vers}.{minor_vers}\n')
 
 	# use the configuration manager to load configuration variables from the .conf file
 	import settings_manager
@@ -525,7 +521,7 @@ if __name__ == "__main__":
 
 	# file doesnt exist so make a new file
 	else:
-		print('PPU.conf does not exist, creating file')
+		logging.info('PPU.conf does not exist, creating file')
 		cm.make_new_conf_file()
 
 	# create variables to hold state of api, directory vars and whether the conf should be updated
@@ -548,11 +544,11 @@ if __name__ == "__main__":
 					update = True
 					conf_dict['modio_api_token'] = modio_api_token_input
 				else:
-					print(f'Invalid API token input')
+					logging.info(f'Invalid API token input')
 					modio_api_token_input = None
 		except:
 			logger.exception(f'Exception when attempting to get token')
-			print(f'Canceled attempt to enter API token')
+			logging.info(f'Canceled attempt to enter API token')
 	else:
 		api_ok = True
 	
@@ -567,11 +563,11 @@ if __name__ == "__main__":
 					update = True
 					conf_dict['pavlov_mod_dir_path'] = pavlov_mod_dir_path_input
 				else:
-					print(f'Invalid Pavlov directory input')
+					logging.info(f'Invalid Pavlov directory input')
 					pavlov_mod_dir_path_input = None
 		except:
 			logger.exception(f'Exception when attempting to get mod path')
-			print(f'Canceled attempt to enter mod path')
+			logging.info(f'Canceled attempt to enter mod path')
 	else:
 		dir_ok = True
 
@@ -585,7 +581,7 @@ if __name__ == "__main__":
 		# create pavlov updater object
 		pu = PavlovUpdater(pavlov_mod_dir_path=conf_dict['pavlov_mod_dir_path'], modio_api_token=conf_dict['modio_api_token'], logging_obj=logger)
 		# get all subscribed modes
-		print(f'Updating subscribed mods')
+		logging.info(f'Updating subscribed mods')
 		pu.update_subscribed_mods()
 	
-		print('=== Finished Updating ===')
+		logging.info('=== Finished Updating ===')
