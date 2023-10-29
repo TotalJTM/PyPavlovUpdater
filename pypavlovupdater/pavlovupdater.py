@@ -478,7 +478,7 @@ class PavlovUpdater:
 		if len(miscompares) > 0:
 			logging.info(f'=== Updating out of date mods ===')
 			for mod in miscompares:
-				print(f'-- Updating {mod["name"]} --')
+				logging.info(f'-- Updating {mod["name"]} --')
 				self.download_modio_file(mod['id'], mod['modfile']['id']) 
 			pass
 

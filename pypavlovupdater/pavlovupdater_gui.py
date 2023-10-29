@@ -647,8 +647,7 @@ if __name__ == "__main__":
 	logger = logging.getLogger()
 	logger.addHandler(logging.StreamHandler(sys.stdout))
 
-	# logger.setLevel(logging.DEBUG)
-	logger.setLevel(logging.ERROR)
+	logger.setLevel(logging.INFO)
 	logger.info(f'Version {major_vers}.{minor_vers}')
 
 	# make settings manager object for use later
