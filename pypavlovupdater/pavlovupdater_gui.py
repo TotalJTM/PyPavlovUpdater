@@ -1,3 +1,5 @@
+import sys
+
 import pavlovupdater
 import settings_manager
 import PySimpleGUI as sg
@@ -11,14 +13,6 @@ import logging
 
 major_vers = 1
 minor_vers = 3
-
-logging.basicConfig(filename="pypavlovupdater.log",	
-					format='%(asctime)s %(message)s', 
-					filemode='w+')
-logger = logging.getLogger()
-
-# logger.setLevel(logging.DEBUG)
-logger.setLevel(logging.ERROR)
 
 ### a few sets of functions to minimize the amount of API calls ###
 # globally defined subscribed mod array 
@@ -106,7 +100,6 @@ def make_mod_item_frame(pvu, mod):
 					f.write(image_bin)
 			except Exception as e:
 				# default to a pysimplegui emoji
-				print(e)
 				logger.exception(f'Exception when making mod item frame')
 				logo_faddr = sg.EMOJI_BASE64_HAPPY_THUMBS_UP
 
@@ -270,20 +263,16 @@ def make_download_window(pvu):
 	# return the assembled window
 	return sg.Window(f'Download Menu', assembled_layout, finalize=True)
 
-
-# make settings manager object for use later
-cm = settings_manager.Conf_Manager('PPU.conf', logger)
-
 # function to load settings from settings manager
-def load_settings():
+def load_settings(configManager):
 	conf_dict = None
 	if os.path.exists('PPU.conf'):
-		conf_dict = cm.get_file_conts_as_dict()
+		conf_dict = configManager.get_file_conts_as_dict()
 
-	# file doesnt exist so make a new file
+	# file doesn't exist so make a new file
 	else:
-		print('PPU.conf does not exist, creating file')
-		cm.make_new_conf_file()
+		logging.info('PPU.conf does not exist, creating file')
+		configManager.make_new_conf_file()
 
 	# if the dict is none, add keys to conf_dict (will trigger input)
 	if conf_dict == None:
@@ -298,9 +287,9 @@ def load_settings():
 	return conf_dict
 
 # save settings file through settings manager
-def save_settings(api_token, mod_dir):
+def save_settings(api_token, mod_dir, configManager):
 	os.remove('PPU.conf')
-	cm.make_new_conf_file(api_token, mod_dir)
+	configManager.make_new_conf_file(api_token, mod_dir)
 
 # define layout for the options/settings tab
 def make_options_window(sets):
@@ -373,7 +362,7 @@ def get_latest_program_version():
 		return None, None
 
 # main menu for the pavlov mod updater
-def mainmenu(settings, pvu):
+def mainmenu(configManager, pvu):
 	sg.theme('DefaultNoMoreNagging')
 
 	# attempt to check the latest version of the program from the github release tag
@@ -389,7 +378,7 @@ def mainmenu(settings, pvu):
 				sg.Popup("You are running an outdated version of PyPavlovUpdater.\nYou can download a new version from https://github.com/TotalJTM/PyPavlovUpdater/releases", 
 				title = 'Out of Date', non_blocking = True, keep_on_top = True)
 	except:
-		logger.exception(f'Exception when gettin latest program version')
+		logger.exception(f'Exception when getting latest program version')
 		pass
 
 	# make all variables for the window
@@ -476,8 +465,8 @@ def mainmenu(settings, pvu):
 			elif event == '__button_open_download_window__' and download_window == None:
 				try:
 					download_window = make_download_window(pvu)
-				except:
-					print('exceptions')
+				except Exception:
+					logging.exception("Error")
 			elif event == '__button_open_subscribed_window__' and subscribed_window == None:
 				subscribed_window = make_sub_mod_window(pvu)
 
@@ -493,7 +482,7 @@ def mainmenu(settings, pvu):
 				mod_dir = options_window['__input_settings_mod_dir__'].get()
 				api_key = options_window['__input_settings_api_key__'].get()
 				# update PPU.conf installation
-				save_settings(api_key, mod_dir)
+				save_settings(api_key, mod_dir, configManager)
 				# update PavlovUpdater object with updated settings
 				pvu.pavlov_mod_dir_path = mod_dir
 				pvu.modio_api_token = api_key
@@ -552,7 +541,6 @@ def mainmenu(settings, pvu):
 
 				except Exception as e:
 					logger.exception(f'Exception in downloading menu')
-					print(f'error occured {e}')
 				finally:
 					# update the installed modlist
 					update_installed_mods(pvu)
@@ -653,18 +641,27 @@ def mainmenu(settings, pvu):
 	main_window.close()
 
 if __name__ == "__main__":
-	print(f'PyPavlovUpdater GUI Version {major_vers}.{minor_vers}')
+	logging.basicConfig(filename="pypavlovupdater.log",
+						format='%(asctime)s %(message)s',
+						filemode='w+')
+	logger = logging.getLogger()
+	logger.addHandler(logging.StreamHandler(sys.stdout))
+
+	logger.setLevel(logging.INFO)
 	logger.info(f'Version {major_vers}.{minor_vers}')
 
+	# make settings manager object for use later
+	configurationManager = settings_manager.Conf_Manager('PPU.conf', logger)
+
 	# load saved settings
-	settings = load_settings()
+	settings = load_settings(configurationManager)
 
 	# create pavlov updater object from saved settings
 	pavlov_updater = pavlovupdater.PavlovUpdater(settings['pavlov_mod_dir_path'], settings['modio_api_token'], logger)
 	try:
 		# launch gui main menu
 		while True:
-			ret = mainmenu(settings, pavlov_updater)
+			ret = mainmenu(configurationManager, pavlov_updater)
 			if ret == 'continue':
 				continue
 			else:
