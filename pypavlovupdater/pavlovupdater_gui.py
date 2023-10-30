@@ -1,14 +1,15 @@
-import sys
-
 import pavlovupdater
 import settings_manager
-import PySimpleGUI as sg
+
+import sys
+import logging
 from datetime import datetime
 import os
 import io
+
+import PySimpleGUI as sg
 from PIL import Image
 import requests
-import logging
 
 
 major_vers = 1
@@ -407,7 +408,7 @@ def mainmenu(configManager, pvu):
 		downloading_window.refresh()
 
 	# get the installed modlist list
-	installed_mods = pvu.get_installed_modlist()
+	installed_mods = get_installed_mods(pvu)
 
 	# define the program layout
 	layout = [
