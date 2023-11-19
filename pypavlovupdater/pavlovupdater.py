@@ -236,6 +236,28 @@ class PavlovUpdater:
 				
 		return mods
 	
+	# remove items from a directory path
+	def remove_items_from_dir(self, dirpath, rm_dir=False):
+		try:
+			files_to_remove = []
+			folders_to_remove = []
+			for path, folders, files in os.walk(dirpath):
+				for f in files:
+					files_to_remove.insert(0,f'{path}/{f}')
+				for f in folders:
+					folders_to_remove.insert(0,f'{path}/{f}')
+
+			for file in files_to_remove:
+				os.remove(file)
+			for folder in folders_to_remove:
+				os.rmdir(folder)
+
+			if rm_dir:
+				os.rmdir(dirpath)
+		except Exception as e:
+			self.logger.exception(f'Exception when removing mod folders')
+			self.logger.info(f'Skipped removing dir items : {e}')
+	
 	# get a list of installed mods (from Pavlov mod directory)
 	# returns a dictionary of UGC codes and versions (taint file contents) (ex. {'UGC3262677': 4333298,...})
 	def get_installed_modlist(self):
@@ -255,8 +277,16 @@ class PavlovUpdater:
 
 					# also try to read the 'taint' file (where the version is stored)
 					version = None
+					os.path.join(path, folder, 'taint')
+
+					# get the path to the taint file and see if it exists, if no taint file the next part will fail
+					taint_path = f'{path}/{folder}/taint'
+					if not os.path.exists(taint_path):
+						self.remove_items_from_dir(f'{path}/{folder}', rm_dir=True)
+						continue
+
 					try:
-						with open(os.path.join(path, folder, 'taint'), 'r') as t:
+						with open(f'{path}/{folder}/taint', 'r') as t:
 							text = t.read()
 							if text != '':
 								version = int(text)
@@ -362,29 +392,11 @@ class PavlovUpdater:
 			if code_to_run_during_download != None: 
 				code_to_run_during_download(100.0)
 
-			def remove_items_from_dir(path):
-				try:
-					files_to_remove = []
-					folders_to_remove = []
-					for path, folders, files in os.walk(ugc_path):
-						for f in files:
-							files_to_remove.insert(0,f'{path}/{f}')
-						for f in folders:
-							folders_to_remove.insert(0,f'{path}/{f}')
-
-					for file in files_to_remove:
-						os.remove(file)
-					for folder in folders_to_remove:
-						os.rmdir(folder)
-
-				except Exception as e:
-					self.logger.exception(f'Exception when removing mod folders')
-					self.logger.info(f'Skipped removing dir items : {e}')
 
 			# check if the mod directory exists
 			if os.path.exists(ugc_path):
 				# iter through the UGC folder to delete files/folders
-				remove_items_from_dir(ugc_path)
+				self.remove_items_from_dir(ugc_path)
 					
 			# if the directory doesnt exist, make the directory
 			else:
@@ -410,8 +422,8 @@ class PavlovUpdater:
 			self.logger.info(e)
 			self.logger.info(f'Could not install mod, skipping')
 			# if transferring the file/writing taint file fails, remove the mod dir for clean install next time
-			remove_items_from_dir(ugc_path)
-			os.rmdir(ugc_path)
+			self.remove_items_from_dir(ugc_path, rm_dir=True)
+
 			if tempfile_path != None:
 				if os.path.exists(tempfile_path):
 					os.remove(tempfile_path)

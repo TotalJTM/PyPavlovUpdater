@@ -36,6 +36,15 @@ def get_subscribed_mods(pvu):
 	if subscribed_mods == None:
 		update_subscribed_mods(pvu)
 	return subscribed_mods
+# get the entry of a mod by passing the ugc 'id' of the expected mod
+def retrieve_subscribed_mod_by_ugc(pvu, ugc):
+	global subscribed_mods
+	if subscribed_mods == None:
+		update_subscribed_mods(pvu)
+	for entry in subscribed_mods:
+		if entry['id'] == ugc:
+			return entry
+	return None
 
 # globally defined insatlled mod array 
 installed_mods = None
@@ -256,13 +265,22 @@ def make_download_window(pvu):
 	
 	# if there are mods to download, add the table layout (in either a scrollable window or as elements)
 	if (len(miscompares)+len(not_installed)) != 0:
-		if len(ugc_col) >= 10:
-			assembled_layout.append([sg.Column([table_layout], size=(800,500), expand_x=True, expand_y=True, scrollable=True)])
+		if len(ugc_col) > (15+1):	# need to account for the header element in addition to mods
+			assembled_layout.append([sg.Column([table_layout], size=(800,420), expand_x=True, expand_y=True, scrollable=True)])
 		else:
-			assembled_layout.append(table_layout)
+			assembled_layout.append([sg.Column([table_layout], expand_x=True, expand_y=True)])
 
 	# return the assembled window
 	return sg.Window(f'Download Menu', assembled_layout, finalize=True)
+
+# get the default pavlov mod directory location
+def get_pavlov_mod_dir_loc():
+	pavlov_path = f"{os.getenv('LOCALAPPDATA')}\Pavlov\Saved\Mods"
+	try:
+		if os.path.exists(pavlov_path):
+			return pavlov_path
+	except:
+		return None
 
 # function to load settings from settings manager
 def load_settings(configManager):
@@ -284,6 +302,12 @@ def load_settings(configManager):
 		conf_dict['modio_api_token'] = ''
 	if 'pavlov_mod_dir_path' not in conf_dict:
 		conf_dict['pavlov_mod_dir_path'] = ''
+
+	# attempt to use the default pavlov mod dir path
+	if conf_dict['pavlov_mod_dir_path'] == '':
+		dir_loc = get_pavlov_mod_dir_loc()
+		if dir_loc != None:
+			conf_dict['pavlov_mod_dir_path'] = dir_loc
 
 	return conf_dict
 
@@ -347,7 +371,9 @@ You can also find me on the Pavlov Push Discord: https://discord.gg/3ngWgM4TwA
 # mod downloader window (something simple with a progress bar)
 def make_downloading_window():
 	return [
-		[sg.Text(f'Mod UGC:'), sg.Text('', key='__text_ugc__')],
+		[sg.Text(f'Downloading UGC:'), sg.Text('', key='__text_ugc__')],
+		[sg.Text(f''), sg.Text('', key='__text_name__')],
+		[sg.HorizontalSeparator()],
 		[sg.Text(f'', key='__text_updates__')],
 		[sg.ProgressBar(100, orientation='h', size=(20,20), key='__progress_bar__')]
 	]
@@ -443,14 +469,11 @@ def mainmenu(configManager, pvu):
 			window, event, values = sg.read_all_windows(timeout=100)
 		except Exception as e:
 			logger.exception(f'Exception when reading windows')
-			print(f'Closed with error: {e}')
 			break
 
 		# timeout event to allow background things to occur
 		if event == '__TIMEOUT__':
 			continue
-
-		# print(event)
 
 		if event == 'Cancel':
 			break
@@ -461,7 +484,7 @@ def mainmenu(configManager, pvu):
 				break
 			# handle button events to open windows
 			elif event == '__button_open_options_window__' and options_window == None:
-				settings = load_settings()
+				settings = load_settings(configManager)
 				options_window = make_options_window(settings)
 			elif event == '__button_open_download_window__' and download_window == None:
 				try:
@@ -533,8 +556,12 @@ def mainmenu(configManager, pvu):
 								continue
 
 							nv = value.strip('__').split('_')
-							# update the ugc text field in the downloading window
-							downloading_window['__text_ugc__'].update(nv[2].strip('UGC'))
+							# update the ugc text in the downloading window
+							download_ugc = nv[2].strip('UGC')
+							downloading_window['__text_ugc__'].update(download_ugc)
+							# update the mod name text in the downloading window
+							mod_details = retrieve_subscribed_mod_by_ugc(pvu, int(download_ugc))
+							downloading_window['__text_name__'].update(mod_details['name'] if mod_details != None else 'Unknown Name')
 							# download the mod (provide callback so this function can update the window without recreating download here)
 							success = pvu.download_modio_file(int(nv[2].strip('UGC')), int(nv[3]), code_to_run_during_download=download_window_func)
 							if success != True:
