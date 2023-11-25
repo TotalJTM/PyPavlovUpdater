@@ -153,7 +153,7 @@ def make_mod_item_frame(pvu, mod):
 
 
 # define layout for the subscribed tab
-def make_sub_mod_window(pvu, mod_filter=None):
+def make_sub_mod_window(pvu, mod_filter=None, filter_type=None):
 	# get list of subscribed mods
 	mods = get_subscribed_mods(pvu)
 	if mods == None:
@@ -171,8 +171,16 @@ def make_sub_mod_window(pvu, mod_filter=None):
 	count = 1
 	for mod in mods:
 		# apply filter if filter var not None
-		if mod_filter != None and mod_filter.lower() not in mod['name'].lower():
-			continue
+		if mod_filter != None:
+			if filter_type == 'Name':
+				if mod_filter.lower() not in mod['name'].lower():
+					continue
+			if filter_type == 'Author':
+				if mod_filter.lower() not in mod['maker'].lower():
+					continue
+			if filter_type == 'UGC':
+				if mod_filter.lower() not in str(mod['id']):
+					continue
 			
 		if count%2 == True:
 			mods_left.append([make_mod_item_frame(pvu, mod)])
@@ -183,6 +191,11 @@ def make_sub_mod_window(pvu, mod_filter=None):
 	# assemble the layout into an array
 	mods_layout_arr = [[sg.Column(mods_left, key='__subbed_mods_left__', vertical_alignment='top'), sg.Column(mods_right, key='__subbed_mods_right__', vertical_alignment='top')]]
 
+	# filter modlist and make sure filter elements have an expected fallback value for display
+	filter_modlist = ['Name','UGC','Author']
+	filter_type = filter_type if filter_type != None else filter_modlist[0]
+	mod_filter = mod_filter if mod_filter != None else ''
+
 	# make the larger subscribed mod window layout with the newly assembled mod layout
 	assembled_layout = [
 		[sg.Text(f'{len(mods)-len(miscompares)-len(not_installed)}/{len(mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'),
@@ -190,7 +203,7 @@ def make_sub_mod_window(pvu, mod_filter=None):
 			sg.Button('Subscribe to nonsubscribed-but-installed mods', key='__button_subto_installed__'),
 			sg.Button('Refresh Modlist', key='__button_subbed_refresh__'),],
 		[sg.HorizontalSeparator()],
-		[sg.Text('Filter (name)'), sg.Input('', key='__subbed_filter__', expand_x=True), sg.Button('Submit', key='__button_subbed_filter__')],
+		[sg.Text('Filter'), sg.Combo(filter_modlist, default_value=filter_type, key='__subbed_filttype__'), sg.Input(mod_filter, key='__subbed_filter__', expand_x=True), sg.Button('Submit', key='__button_subbed_filter__')],
 		[sg.Column(mods_layout_arr, key='__sub_mod_scrollable__', scrollable=True, justification='right', expand_x=True, expand_y=True)]#vertical_scroll_only=True,
 	]
 
@@ -334,23 +347,25 @@ def make_options_window(sets):
 
 	# help text for options window
 	help_text = """This program does 3 things:
-        1) Check the users subscribed mods against the installed mods, then update out of date mods
-        2) Install mods that are subscribed to but not installed
-        3) Subscribe to any mod that is installed but not currently subscribed to.
+		1) Check the users subscribed mods against the installed mods, then update out of date mods
+		2) Install mods that are subscribed to but not installed
+		3) Subscribe to any mod that is installed but not currently subscribed to.
+
+Subscribe to maps and mods at "https://mod.io/g/pavlov", enter your settings and begin downloading.
 
 The following settings are needed to use this program:
-        Pavlov Mod Directory Path: the path to the downloaded Pavlov mods folder
-        Mod.io API Key: acquired from "https://mod.io/me/access" (read+write) then copied into the modio_api_token variable
+		Pavlov Mod Directory Path: the path to the downloaded Pavlov mods folder
+		Mod.io API Key: acquired from "https://mod.io/me/access" (read+write) then copied into the modio_api_token variable
 Enter these values in the input fields below.
 
 A 'PPU.conf' file and a 'local' folder (that will be filled with images) will be created through the use of this program.
-    Please keep the executable with these items or program settings/downloaded mod thumbnails will need to be 
-    reentered/redownloaded.
+	Please keep the executable with these items or program settings/downloaded mod thumbnails will need to be 
+	reentered/redownloaded.
 		
 If you run into issues using this program, please let me know through the following:
-        Github Repo Issue Page: https://github.com/TotalJTM/PyPavlovUpdater/issues
-        Email: totaljtm@gmail.com
-     
+		Github Repo Issue Page: https://github.com/TotalJTM/PyPavlovUpdater/issues
+		Email: totaljtm@gmail.com
+	 
 You can also find me on the Pavlov Push Discord: https://discord.gg/3ngWgM4TwA
 """
 	# return full layout
@@ -372,7 +387,7 @@ You can also find me on the Pavlov Push Discord: https://discord.gg/3ngWgM4TwA
 def make_downloading_window():
 	return [
 		[sg.Text(f'Downloading UGC:'), sg.Text('', key='__text_ugc__')],
-		[sg.Text(f''), sg.Text('', key='__text_name__')],
+		[sg.Text('', key='__text_name__')],
 		[sg.HorizontalSeparator()],
 		[sg.Text(f'', key='__text_updates__')],
 		[sg.ProgressBar(100, orientation='h', size=(20,20), key='__progress_bar__')]
@@ -605,11 +620,18 @@ def mainmenu(configManager, pvu):
 			if event == sg.WIN_CLOSED:
 				subscribed_window.close()
 				subscribed_window = None
+				continue
+
+			# get the filter data so we can let it persist across screen refreshes
+			filt = subscribed_window['__subbed_filter__'].get()
+			filt_type = subscribed_window['__subbed_filttype__'].get()
+			if filt == '':	# filt should be None if there is no filter input
+				filt = None
+
 			# buttons that require refreshing the window
-			elif event == '__button_subbed_refresh__' or event == '__button_subbed_filter__' or event == '__button_subto_installed__':
-				# get the filter data if this is the 'subbed filter' button
-				if event == '__button_subbed_filter__':
-					filt = subscribed_window['__subbed_filter__'].get()
+			if event == '__button_subbed_refresh__' or event == '__button_subbed_filter__' or event == '__button_subto_installed__':				
+				# if event == '__button_subbed_filter__':
+					
 				# set a variable to hold popup text (if needed later)
 				popup_text = None
 				# if the subto button was pressed, subscribe to all mods and make popup text
@@ -639,11 +661,11 @@ def mainmenu(configManager, pvu):
 					update_subscribed_mods(pvu)
 
 				# if the filter was applied, add it to mod window construction
-				if event == '__button_subbed_filter__':
-					subscribed_window = make_sub_mod_window(pvu, filt)
+				# if event == '__button_subbed_filter__':
+				subscribed_window = make_sub_mod_window(pvu, filt, filt_type)
 				# otherwise remake window like normal
-				else:
-					subscribed_window = make_sub_mod_window(pvu)
+				# else:
+				# 	subscribed_window = make_sub_mod_window(pvu, filt, filt_type)
 
 				# do the popup if the object changed
 				if popup_text != None:
@@ -673,7 +695,7 @@ if __name__ == "__main__":
 						format='%(asctime)s %(message)s',
 						filemode='w+')
 	logger = logging.getLogger()
-	logger.addHandler(logging.StreamHandler(sys.stdout))
+	# logger.addHandler(logging.StreamHandler(sys.stdout))
 
 	logger.setLevel(logging.INFO)
 	logger.info(f'Version {major_vers}.{minor_vers}')

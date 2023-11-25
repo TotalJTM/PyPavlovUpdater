@@ -403,10 +403,13 @@ class PavlovUpdater:
 				os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
 			# make the Data directory
 			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
-
-			# unzip the downloaded file and place it in the Data directory
-			with zipfile.ZipFile(tempfile_path, 'r') as z:
-				z.extractall(f"{self.pavlov_mod_dir_path}/UGC{ugc}/Data/")
+			
+			try:
+				# unzip the downloaded file and place it in the Data directory
+				with zipfile.ZipFile(tempfile_path, 'r') as z:
+					z.extractall(f"{self.pavlov_mod_dir_path}/UGC{ugc}/Data/")
+			except:
+				self.logger.exception(f'Exception installing mod')
 
 			# open the 'taint' file and write the new version
 			with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
