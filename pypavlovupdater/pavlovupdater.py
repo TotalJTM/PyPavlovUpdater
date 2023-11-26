@@ -49,13 +49,13 @@ class PavlovUpdater:
 		
 	# make a post request to modio
 	#	route = address to make request at (ex. games/3959/mods)
-	def modio_post(self, route, ret_json=True):
+	def modio_post(self, route, ret_json=True, params={}):
 		self.logger.info(f'Post request {route}')
 		# assemble address and header
 		addr = f"{self.modio_api_url}/{route}"
 		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
 		# send request
-		response = requests.post(addr, params={}, headers=head)
+		response = requests.post(addr, params=params, headers=head)
 		# convert the response to a json dict
 		if ret_json == True:
 			d = response.json()
@@ -81,6 +81,8 @@ class PavlovUpdater:
 
 		return response
 	
+	# get an image from modio
+	#	route = image address acquired from a mod message
 	def get_modio_image(self, route):
 		self.logger.info(f'Get modio image {route}')
 		# assemble address and header
@@ -92,6 +94,35 @@ class PavlovUpdater:
 		if response.status_code != 200:
 			return None
 		return response.content
+	
+	# rate a mod on modio
+	def modio_rate_mod(self, ugc, like=False, dislike=False):
+		resp = None
+		if like:
+			resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{ugc}/ratings', params={'rating':1}, ret_json=False)
+		elif dislike:
+			resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{ugc}/ratings', params={'rating':-1}, ret_json=False)
+		else:
+			resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{ugc}/ratings', params={'rating':0}, ret_json=False)
+
+		if resp:
+			if resp.status_code == 404:
+				return False
+			return True
+		return False
+		
+	# get the user ratings from modio and strip it of non-pavlov games
+	def get_modio_user_ratings(self):
+		resp = self.modio_get(f'me/ratings', ret_json=False)
+		if resp.status_code != 200:
+			return {}
+		else:
+			decoded_cont = resp.json()
+			rating_dict = {}
+			for item in decoded_cont["data"]:
+				if item['game_id'] == int(self.pavlov_gameid):
+					rating_dict[item['mod_id']] = item['rating']
+			return rating_dict
 
 	# get the full modlist for Pavlov
 	def get_pavlov_modlist(self):
@@ -119,6 +150,7 @@ class PavlovUpdater:
 			if modfile_live_win == None:
 				return None
 
+			# print(m)
 			# attributes in a subscribed modlist entry
 			return {
 				'id':m['id'], 
@@ -129,22 +161,21 @@ class PavlovUpdater:
 				'date_updated':m['date_updated'], 
 				'date_live':m['date_live'], 
 				'description':m['description_plaintext'],
+				'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
 				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
-				'modfile':{
-					'id': modfile_live_win,
-					'date_added':m['modfile']['date_added'],
-					'filesize':m['modfile']['filesize'],
-					'filehash':m['modfile']['filehash'],
-					'version':m['modfile']['version'],
-					'binary_url':m['modfile']['download']['binary_url'],
-				}
 			}
 
 		# go through response and make/add entrys to the mods arr
 		for m in init_resp['data']:
-			entry = make_entry(m)
+			try:
+				entry = make_entry(m)
+			except:
+				self.logger.exception('Error making mod')
+				self.logger.error(f'Mod {m}')
+				continue
 			if entry != None:
 				mods.append(entry)
+			
 
 		# calculate number of pages to get all users subscribed mods
 		total_pages = int(resp_result_tot/resp_result_cnt)+1
@@ -202,6 +233,7 @@ class PavlovUpdater:
 				'date_updated':m['date_updated'], 
 				'date_live':m['date_live'], 
 				'description':m['description_plaintext'],
+				'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
 				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
 				'modfile':{
 					'id': modfile_live_win,
@@ -403,7 +435,7 @@ class PavlovUpdater:
 				os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
 			# make the Data directory
 			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
-			
+
 			try:
 				# unzip the downloaded file and place it in the Data directory
 				with zipfile.ZipFile(tempfile_path, 'r') as z:

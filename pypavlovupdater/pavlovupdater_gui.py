@@ -16,6 +16,36 @@ major_vers = 1
 minor_vers = 3
 
 ### a few sets of functions to minimize the amount of API calls ###
+# globally defined full pavlov mod array 
+full_mods = None
+# function to update modlist
+def update_full_mods(pvu):
+	global full_mods
+	full_mods = pvu.get_pavlov_modlist()
+	if 'error' in full_mods:
+		if '401' in full_mods:
+			logger.error('Error 401 when getting all mods, API key rejected')
+			sg.Popup('Could not get all mods, API key was rejected', non_blocking=True, keep_on_top =True)
+		else:
+			logger.error(f'Error when getting all mods: {full_mods.strip("error")}')
+			sg.Popup(f'Could not get all mods, Error {full_mods.strip("error")}', non_blocking=True, keep_on_top =True)
+		full_mods = None
+# function to get modlist without defining global
+def get_full_mods(pvu):
+	global full_mods
+	if full_mods == None:
+		update_full_mods(pvu)
+	return full_mods
+# get the entry of a mod by passing the ugc 'id' of the expected mod
+def retrieve_full_mod_by_ugc(pvu, ugc):
+	global full_mods
+	if full_mods == None:
+		update_full_mods(pvu)
+	for entry in full_mods:
+		if entry['id'] == ugc:
+			return entry
+	return None
+
 # globally defined subscribed mod array 
 subscribed_mods = None
 # function to update modlist
@@ -62,6 +92,30 @@ def get_installed_mods(pvu):
 		update_installed_mods(pvu)
 	return installed_mods
 
+# globally defined user rating dict 
+user_ratings = None
+# function to update modlist
+def update_user_ratings(pvu):
+	global user_ratings
+	user_ratings = pvu.get_modio_user_ratings()
+	# if len(user_ratings) == 0:
+	# 	logger.error('No installed mods found')
+	# 	sg.Popup('Could not find installed mods, check that mod directory is valid. Disregard if intentional.', non_blocking=True, keep_on_top =True)
+# function to get modlist without defining global
+def get_user_ratings(pvu):
+	global user_ratings
+	if user_ratings == None:
+		update_user_ratings(pvu)
+	return user_ratings
+# function to look for a user rating, defaults to 0
+def get_user_rating_by_ugc(pvu, ugc):
+	global user_ratings
+	if user_ratings == None:
+		update_user_ratings(pvu)
+	if ugc in user_ratings:
+		return user_ratings[ugc]
+	return 0
+
 # globally defined miscompare array vars
 miscompares = None
 not_installed = None
@@ -88,8 +142,12 @@ popup_title = 'PyPavlovUpdater Popup'
 # global dict to hold created images (so they dont have to get loaded again)
 image_bios = {}
 download_popup_occured = False
+# like/dislike button colors
+actv_green = ('white', 'green')
+actv_red = ('white', 'red')
+default_btn = ('white', '#082567')
 # define the layout for mod lists
-def make_mod_item_frame(pvu, mod):
+def make_mod_item_frame(pvu, mod, subbed_menu=True):
 	global image_bios, download_popup_occured
 	# make locals folder to store mod thumbnails
 	if not os.path.exists('local'):
@@ -121,6 +179,8 @@ def make_mod_item_frame(pvu, mod):
 
 		image_bios[str(mod['id'])] = bio
 
+	user_mod_rating = get_user_rating_by_ugc(pvu, mod['id'])
+
 	# make timestamp for last updated text
 	date_str = datetime.fromtimestamp(mod['date_updated'])
 
@@ -129,16 +189,28 @@ def make_mod_item_frame(pvu, mod):
 		[sg.Image(data=image_bios[str(mod['id'])].getvalue())]
 	]
 	# mod information next to the image
-	col_mid = [
-		[sg.Text(f"{mod['name']}")],
-		[sg.Text(f"By {mod['maker']}")],
-		[sg.Text(f"Version: {mod['modfile']['version']}")],
-		[sg.Text(f"Last Updated {date_str}")],
-	]
+	if subbed_menu:
+		col_mid = [
+			[sg.Text(f"{mod['name']:50s}")],
+			[sg.Text(f"By {mod['maker']}")],
+			[sg.Text(f"Version: {mod['modfile']['version']}")],
+			[sg.Text(f"Last Updated {date_str}")],
+			[sg.Text(f"Type {mod['type']}")],
+		]
+	else:
+		col_mid = [
+			[sg.Text(f"{mod['name']:50s}")],
+			[sg.Text(f"By {mod['maker']}")],
+			[sg.Text(f"Last Updated {date_str}")],
+			[sg.Text(f"Type {mod['type']}")],
+		]
 	# mod options on the right
+	subbed_status = True if retrieve_subscribed_mod_by_ugc(pvu, mod['id']) != None else False
 	col_right = [
-		[sg.Button('Unsubscribe', key=f'__button_unsub_{mod["id"]}__', expand_x=True)],
-		[sg.Button('Subscribe', key=f'__button_sub_{mod["id"]}__', visible=False, expand_x=True)],
+		[sg.Button('UnSub', key=f'__button_unsub_{mod["id"]}__', visible=subbed_status, expand_x=True)],
+		[sg.Button('Sub', key=f'__button_sub_{mod["id"]}__', visible=(not subbed_status), expand_x=True)],
+		[sg.Button('Like' if user_mod_rating <= 0 else 'Liked', key=f'__button_like_{mod["id"]}__', button_color=None if user_mod_rating <= 0 else actv_green, expand_x=True)],
+		[sg.Button('Dislike' if user_mod_rating >= 0 else 'Disliked', key=f'__button_dislike_{mod["id"]}__', button_color=None if user_mod_rating >= 0 else actv_red, expand_x=True)],
 	]
 
 	# lay out columns of above elements to go in frame
@@ -148,17 +220,50 @@ def make_mod_item_frame(pvu, mod):
 	]
 
 	# return the assembled frame
-	return sg.Frame(f"UGC{mod['id']}", conts, expand_x=True)
+	return sg.Frame(f"UGC{mod['id']}", conts, expand_x=True, pad=(0,5))
 
-
+mods_per_page = 50
 
 # define layout for the subscribed tab
-def make_sub_mod_window(pvu, mod_filter=None, filter_type=None):
+def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
+	# update user ratings 
+	ratings = update_user_ratings(pvu)
+
 	# get list of subscribed mods
 	mods = get_subscribed_mods(pvu)
 	if mods == None:
 		return sg.Window(f'Subscribed Mods', [[sg.Text('Could not get subscribed mod list')]], finalize=True, size=(350,75))
 
+	# if there is a mod filter, trim the mod list before beginning pagination
+	if mod_filter != None:
+		filtered_mods = []
+		for mod in mods:
+			# continue if mod filter input is not in the mod attribute
+			if filter_type == 'Name':
+				if mod_filter.lower() not in mod['name'].lower():
+					continue
+			if filter_type == 'Author':
+				if mod_filter.lower() not in mod['maker'].lower():
+					continue
+			if filter_type == 'UGC':
+				if mod_filter.lower() not in str(mod['id']):
+					continue
+			filtered_mods.append(mod)
+
+		# replace local mod list
+		mods = filtered_mods
+		
+
+	# calculate the number of pages based on mods_per_page, clean the input of values greater than max page
+	num_mod_pages = int(len(mods)/mods_per_page)+1
+	if page > num_mod_pages:
+		page = num_mod_pages
+	# get mod array index where the page starts
+	mod_page_ind = (page-1)*mods_per_page
+	# calculate the mod array offset
+	mods_page_ind_offset = mods_per_page if len(mods) > (mods_per_page+mod_page_ind) else (len(mods)-mod_page_ind)
+	# reduce mod list to the paginated mods
+	mods = mods[mod_page_ind:mod_page_ind+mods_per_page]
 	# get list of installed mods
 	installed_mods = get_installed_mods(pvu)
 
@@ -169,24 +274,16 @@ def make_sub_mod_window(pvu, mod_filter=None, filter_type=None):
 	mods_left = []
 	mods_right = []
 	count = 1
-	for mod in mods:
-		# apply filter if filter var not None
-		if mod_filter != None:
-			if filter_type == 'Name':
-				if mod_filter.lower() not in mod['name'].lower():
-					continue
-			if filter_type == 'Author':
-				if mod_filter.lower() not in mod['maker'].lower():
-					continue
-			if filter_type == 'UGC':
-				if mod_filter.lower() not in str(mod['id']):
-					continue
-			
+	for mod in mods:			
 		if count%2 == True:
-			mods_left.append([make_mod_item_frame(pvu, mod)])
+			mods_left.append([make_mod_item_frame(pvu, mod, subbed_menu=True)])
 		else:
-			mods_right.append([make_mod_item_frame(pvu, mod)])
+			mods_right.append([make_mod_item_frame(pvu, mod, subbed_menu=True)])
 		count += 1
+
+	# reset global popup flag (need a better way to do this, only needed because of paginated icon downloads)
+	global download_popup_occured
+	download_popup_occured = False
 
 	# assemble the layout into an array
 	mods_layout_arr = [[sg.Column(mods_left, key='__subbed_mods_left__', vertical_alignment='top'), sg.Column(mods_right, key='__subbed_mods_right__', vertical_alignment='top')]]
@@ -196,22 +293,124 @@ def make_sub_mod_window(pvu, mod_filter=None, filter_type=None):
 	filter_type = filter_type if filter_type != None else filter_modlist[0]
 	mod_filter = mod_filter if mod_filter != None else ''
 
+	button_line = [
+		sg.Text('Filter'), 
+		sg.Combo(filter_modlist, default_value=filter_type, key='__subbed_filttype__'), 
+		sg.Input(mod_filter, key='__subbed_filter__', expand_x=True), 
+		sg.Button('Submit', key='__button_subbed_filter__', bind_return_key=True),
+		sg.Button('< Page', key='__button_subbed_page<__'),
+		sg.Input(str(page), key='__subbed_page_num__', size=(3,0)), 
+		sg.Text(f'of {str(num_mod_pages)}'), 
+		sg.Button('Page >', key='__button_subbed_page>__'),
+		]
+
 	# make the larger subscribed mod window layout with the newly assembled mod layout
 	assembled_layout = [
 		[sg.Text(f'{len(mods)-len(miscompares)-len(not_installed)}/{len(mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'),
 			sg.Column([[]], expand_x=True), 
-			sg.Button('Subscribe to nonsubscribed-but-installed mods', key='__button_subto_installed__'),
+			sg.Button(f'Subscribe to nonsubscribed-but-installed mods [{len(not_subscribed)}]', key='__button_subto_installed__'),
 			sg.Button('Refresh Modlist', key='__button_subbed_refresh__'),],
 		[sg.HorizontalSeparator()],
-		[sg.Text('Filter'), sg.Combo(filter_modlist, default_value=filter_type, key='__subbed_filttype__'), sg.Input(mod_filter, key='__subbed_filter__', expand_x=True), sg.Button('Submit', key='__button_subbed_filter__')],
+		button_line,
 		[sg.Column(mods_layout_arr, key='__sub_mod_scrollable__', scrollable=True, justification='right', expand_x=True, expand_y=True)]#vertical_scroll_only=True,
 	]
 
 	# return the assembled window
-	return sg.Window(f'Subscribed Mods', assembled_layout, size=(1350,500), resizable=True, finalize=True)
+	return sg.Window(f'Subscribed Mods', assembled_layout, size=(1300,500), resizable=True, finalize=True)
+
+
+# define layout for the all-mod tab
+def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
+	# update user ratings 
+	ratings = update_user_ratings(pvu)
+
+	# get list of subscribed mods
+	mods = get_full_mods(pvu)
+	if mods == None:
+		return sg.Window(f'All Mods', [[sg.Text('Could not get full mod list')]], finalize=True, size=(350,75))
+
+	# if there is a mod filter, trim the mod list before beginning pagination
+	if mod_filter != None:
+		filtered_mods = []
+		for mod in mods:
+			# continue if mod filter input is not in the mod attribute
+			if filter_type == 'Name':
+				if mod_filter.lower() not in mod['name'].lower():
+					continue
+			if filter_type == 'Author':
+				if mod_filter.lower() not in mod['maker'].lower():
+					continue
+			if filter_type == 'UGC':
+				if mod_filter.lower() not in str(mod['id']):
+					continue
+			filtered_mods.append(mod)
+
+		# replace local mod list
+		mods = filtered_mods
+		
+
+	# calculate the number of pages based on mods_per_page, clean the input of values greater than max page
+	num_mod_pages = int(len(mods)/mods_per_page)+1
+	if page > num_mod_pages:
+		page = num_mod_pages
+	# get mod array index where the page starts
+	mod_page_ind = (page-1)*mods_per_page
+	# calculate the mod array offset
+	mods_page_ind_offset = mods_per_page if len(mods) > (mods_per_page+mod_page_ind) else (len(mods)-mod_page_ind)
+	# reduce mod list to the paginated mods
+	mods = mods[mod_page_ind:mod_page_ind+mods_per_page]
+	# get list of installed mods
+	installed_mods = get_installed_mods(pvu)
+
+	# make all of the mods into mod_item_layout items
+	mods_left = []
+	mods_right = []
+	count = 1
+	for mod in mods:			
+		if count%2 == True:
+			mods_left.append([make_mod_item_frame(pvu, mod, subbed_menu=False)])
+		else:
+			mods_right.append([make_mod_item_frame(pvu, mod, subbed_menu=False)])
+		count += 1
+
+	# reset global popup flag (need a better way to do this, only needed because of paginated icon downloads)
+	global download_popup_occured
+	download_popup_occured = False
+
+	# assemble the layout into an array
+	mods_layout_arr = [[sg.Column(mods_left, key='__all_mod_mods_left__', vertical_alignment='top'), sg.Column(mods_right, key='__all_mod_mods_right__', vertical_alignment='top')]]
+
+	# filter modlist and make sure filter elements have an expected fallback value for display
+	filter_modlist = ['Name','UGC','Author']
+	filter_type = filter_type if filter_type != None else filter_modlist[0]
+	mod_filter = mod_filter if mod_filter != None else ''
+
+	button_line = [
+		sg.Text('Filter'), 
+		sg.Combo(filter_modlist, default_value=filter_type, key='__all_mod_filttype__'), 
+		sg.Input(mod_filter, key='__all_mod_filter__', expand_x=True), 
+		sg.Button('Submit', key='__button_all_mod_filter__', bind_return_key=True),
+		sg.Button('< Page', key='__button_all_mod_page<__'),
+		sg.Input(str(page), key='__all_mod_page_num__', size=(3,0)), 
+		sg.Text(f'of {str(num_mod_pages)}'), 
+		sg.Button('Page >', key='__button_all_mod_page>__'),
+		]
+
+	# make the larger subscribed mod window layout with the newly assembled mod layout
+	assembled_layout = [
+		[sg.Column([[]], expand_x=True), sg.Button('Refresh Modlist', key='__button_all_mod_refresh__'),],
+		[sg.HorizontalSeparator()],
+		button_line,
+		[sg.Column(mods_layout_arr, key='__all_mod_scrollable__', scrollable=True, justification='right', expand_x=True, expand_y=True)]#vertical_scroll_only=True,
+	]
+
+	# return the assembled window
+	return sg.Window(f'All Mods', assembled_layout, size=(1300,500), resizable=True, finalize=True)
+
 
 # define layout for downloads menu
 def make_download_window(pvu):
+	# get subscribed mods
 	subbed_mods = get_subscribed_mods(pvu)
 	if subbed_mods == None:
 		return sg.Window(f'Download Menu', [[sg.Text('Could not open download menu')]], finalize=True, size=(350,75))
@@ -254,7 +453,7 @@ def make_download_window(pvu):
 	# layout the checkbox column (with formatted keys for event/value handling)
 	checkbox_col_layout = [[sg.Text('Download?', pad=(10,1))]]
 	for i, ugc in enumerate(ugc_col):
-		# hack so I can use the array for table headers
+		# hack so the array can be used for table headers
 		if i==0:
 			continue
 		k = f'__cbox_download_UGC{ugc}_{modfile_id[i]}__'
@@ -457,7 +656,8 @@ def mainmenu(configManager, pvu):
 		[sg.HorizontalSeparator()],
 		[sg.Button(f'Open Options Menu', key='__button_open_options_window__', expand_x=True)],
 		[sg.Button(f'Open Download Menu', key='__button_open_download_window__', expand_x=True)],
-		[sg.Button(f'Open Subscribed Mod Manager', key='__button_open_subscribed_window__', expand_x=True)],	
+		[sg.Button(f'Open Subscribed Mod Manager', key='__button_open_subscribed_window__', expand_x=True)],
+		[sg.Button(f'Open Full Modlist Explorer', key='__button_open_all_mod_window__', expand_x=True)],	
 	]
 
 	# create the main window instance for the app
@@ -492,7 +692,7 @@ def mainmenu(configManager, pvu):
 
 		if event == 'Cancel':
 			break
-		# handle main window events
+		###### handle main window events
 		elif window == main_window:
 			# handle closing window
 			if event == sg.WIN_CLOSED:
@@ -508,8 +708,10 @@ def mainmenu(configManager, pvu):
 					logging.exception("Error")
 			elif event == '__button_open_subscribed_window__' and subscribed_window == None:
 				subscribed_window = make_sub_mod_window(pvu)
+			elif event == '__button_open_all_mod_window__' and all_mods_window == None:
+				all_mods_window = make_all_mod_window(pvu)
 
-		# handle options window events
+		###### handle options window events
 		elif window == options_window:
 			# handle closing window
 			if event == sg.WIN_CLOSED:
@@ -552,7 +754,7 @@ def mainmenu(configManager, pvu):
 						options_window.close()
 						options_window = None
 
-		# handle download window events
+		###### handle download window events
 		elif window == download_window:
 			# handle closing window
 			if event == sg.WIN_CLOSED:
@@ -614,7 +816,7 @@ def mainmenu(configManager, pvu):
 				update_miscompares(pvu)
 				download_window = make_download_window(pvu)
 
-		# handle subscribed window events
+		###### handle subscribed window events
 		elif window == subscribed_window:
 			# handle closing window
 			if event == sg.WIN_CLOSED:
@@ -625,13 +827,33 @@ def mainmenu(configManager, pvu):
 			# get the filter data so we can let it persist across screen refreshes
 			filt = subscribed_window['__subbed_filter__'].get()
 			filt_type = subscribed_window['__subbed_filttype__'].get()
+			page = int(subscribed_window['__subbed_page_num__'].get())
+
+			# ensure the input fields have a known value/type 
 			if filt == '':	# filt should be None if there is no filter input
 				filt = None
 
+			if page < 1:	# page cant be less than 1
+				page = 1
+
+			### handle buttons that will require the window to be refreshed
+			if event == '__button_subbed_page>__':
+				page += 1
+
+			if event == '__button_subbed_page<__':
+				if page > 1:
+					page -= 1
+
+			refresh_page_events = [
+				event == '__button_subbed_refresh__',
+				event == '__button_subbed_filter__',
+				event == '__button_subto_installed__',
+				event == '__button_subbed_page>__',
+				event == '__button_subbed_page<__',
+			]
+
 			# buttons that require refreshing the window
-			if event == '__button_subbed_refresh__' or event == '__button_subbed_filter__' or event == '__button_subto_installed__':				
-				# if event == '__button_subbed_filter__':
-					
+			if any(refresh_page_events):
 				# set a variable to hold popup text (if needed later)
 				popup_text = None
 				# if the subto button was pressed, subscribe to all mods and make popup text
@@ -660,33 +882,190 @@ def mainmenu(configManager, pvu):
 				if event == '__button_subbed_refresh__':
 					update_subscribed_mods(pvu)
 
-				# if the filter was applied, add it to mod window construction
-				# if event == '__button_subbed_filter__':
-				subscribed_window = make_sub_mod_window(pvu, filt, filt_type)
-				# otherwise remake window like normal
-				# else:
-				# 	subscribed_window = make_sub_mod_window(pvu, filt, filt_type)
+				# make the new subscribed mod window with page, filter input and filter combobox inputs
+				subscribed_window = make_sub_mod_window(pvu, page, filt, filt_type)
 
 				# do the popup if the object changed
 				if popup_text != None:
 					sg.popup_ok(popup_text, title='Subscribed Mod Popup', non_blocking=True, keep_on_top =True)
 
+			### handle buttons that dont require the window to be refreshed
 			# unsub from a mod and unhide the subscribe button
 			elif '__button_unsub_' in event:
-				ne = event.strip('__').split('_')
+				ne = event.strip('__').split('_')	# split event name to get ugc
 				resp = pvu.modio_delete(f'games/{pvu.pavlov_gameid}/mods/{ne[2]}/subscribe')
+				# check if successfully unsubscribed
 				if resp.status_code == 204:
 					subscribed_window[event].Update(visible=False)
 					subscribed_window[event.replace('unsub', 'sub')].Update(visible=True)
 			# sub to a mod and unhide the unsubscribe button
 			elif '__button_sub_' in event:
-				ne = event.strip('__').split('_')
+				ne = event.strip('__').split('_')	# split event name to get ugc
 				resp = pvu.modio_post(f'games/{pvu.pavlov_gameid}/mods/{ne[2]}/subscribe', ret_json=False)
+				# check if successfully subscribed
 				if resp.status_code == 201:
 					subscribed_window[event].Update(visible=False)
 					subscribed_window[event.replace('sub', 'unsub')].Update(visible=True)
+
+			# unsub from a mod and unhide the subscribe button
+			elif '__button_like_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				s_ugc = int(ne[2])					# isolate the ugc and make it an int
+				mod_rating = get_user_rating_by_ugc(pvu, s_ugc)	# get mod rating
+				if mod_rating <= 0:	# if mod is not liked, send request to like it
+					resp = pvu.modio_rate_mod(s_ugc, like=True)
+				else:	# if mod is liked, send request to un-like it
+					resp = pvu.modio_rate_mod(s_ugc)
+
+				# check if mod rating was updated, set button colors/text depending on state
+				if resp == True:
+					if mod_rating <= 0:
+						subscribed_window[event].Update(text='Liked', button_color=actv_green)
+						subscribed_window[event.replace('like','dislike')].Update(button_color=default_btn)
+					else:
+						subscribed_window[event].Update(text='Like', button_color=default_btn)
+				# update the user ratings before continuing
+				update_user_ratings(pvu)
+					
+			# sub to a mod and unhide the unsubscribe button
+			elif '__button_dislike_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				s_ugc = int(ne[2])					# isolate the ugc and make it an int
+				mod_rating = get_user_rating_by_ugc(pvu, s_ugc)	# get mod rating
+				if mod_rating >= 0:	# if mod is not disliked, send request to dislike it
+					resp = pvu.modio_rate_mod(s_ugc, dislike=True)
+				else: 	# if mod is disliked, send request to un-dislike it
+					resp = pvu.modio_rate_mod(s_ugc)
+
+				# check if mod rating was updated, set button colors/text depending on state
+				if resp == True:
+					if mod_rating >= 0:
+						subscribed_window[event].Update(text='Disliked', button_color=actv_red)
+						subscribed_window[event.replace('dislike','like')].Update(button_color=default_btn)
+					else:
+						subscribed_window[event].Update(text='Dislike', button_color=default_btn)
+				# update the user ratings before continuing
+				update_user_ratings(pvu)
+
+		###### handle all mod window events
+		elif window == all_mods_window:
+			# handle closing window
+			if event == sg.WIN_CLOSED:
+				all_mods_window.close()
+				all_mods_window = None
+				continue
+
+			# get the filter data so we can let it persist across screen refreshes
+			filt = all_mods_window['__all_mod_filter__'].get()
+			filt_type = all_mods_window['__all_mod_filttype__'].get()
+			page = int(all_mods_window['__all_mod_page_num__'].get())
+
+			# ensure the input fields have a known value/type 
+			if filt == '':	# filt should be None if there is no filter input
+				filt = None
+
+			if page < 1:	# page cant be less than 1
+				page = 1
+
+			### handle buttons that will require the window to be refreshed
+			if event == '__button_all_mod_page>__':
+				page += 1
+
+			if event == '__button_all_mod_page<__':
+				if page > 1:
+					page -= 1
+
+			refresh_page_events = [
+				event == '__button_all_mod_refresh__',
+				event == '__button_all_mod_filter__',
+				event == '__button_all_mod_page>__',
+				event == '__button_all_mod_page<__',
+			]
+
+			# buttons that require refreshing the window
+			if any(refresh_page_events):
+				# set a variable to hold popup text (if needed later)
+				popup_text = None
+				
+				# close window
+				all_mods_window.close()
+				all_mods_window = None
+
+				# update the subscribed mods if the refresh button was pressed
+				if event == '__button_all_mod_refresh__':
+					update_full_mods(pvu)
+					update_subscribed_mods(pvu)
+
+				# make the new subscribed mod window with page, filter input and filter combobox inputs
+				all_mods_window = make_all_mod_window(pvu, page, filt, filt_type)
+
+				# do the popup if the object changed
+				if popup_text != None:
+					sg.popup_ok(popup_text, title='All Mod Popup', non_blocking=True, keep_on_top =True)
+
+			### handle buttons that dont require the window to be refreshed
+			# unsub from a mod and unhide the subscribe button
+			elif '__button_unsub_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				resp = pvu.modio_delete(f'games/{pvu.pavlov_gameid}/mods/{ne[2]}/subscribe')
+				# check if successfully unsubscribed
+				if resp.status_code == 204:
+					all_mods_window[event].Update(visible=False)
+					all_mods_window[event.replace('unsub', 'sub')].Update(visible=True)
+			# sub to a mod and unhide the unsubscribe button
+			elif '__button_sub_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				resp = pvu.modio_post(f'games/{pvu.pavlov_gameid}/mods/{ne[2]}/subscribe', ret_json=False)
+				# check if successfully subscribed
+				if resp.status_code == 201:
+					all_mods_window[event].Update(visible=False)
+					all_mods_window[event.replace('sub', 'unsub')].Update(visible=True)
+
+			# unsub from a mod and unhide the subscribe button
+			elif '__button_like_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				s_ugc = int(ne[2])					# isolate the ugc and make it an int
+				mod_rating = get_user_rating_by_ugc(pvu, s_ugc)	# get mod rating
+				if mod_rating <= 0:	# if mod is not liked, send request to like it
+					resp = pvu.modio_rate_mod(s_ugc, like=True)
+				else:	# if mod is liked, send request to un-like it
+					resp = pvu.modio_rate_mod(s_ugc)
+
+				# check if mod rating was updated, set button colors/text depending on state
+				if resp == True:
+					if mod_rating <= 0:
+						all_mods_window[event].Update(text='Liked', button_color=actv_green)
+						all_mods_window[event.replace('like','dislike')].Update(button_color=default_btn)
+					else:
+						all_mods_window[event].Update(text='Like', button_color=default_btn)
+				# update the user ratings before continuing
+				update_user_ratings(pvu)
+					
+			# sub to a mod and unhide the unsubscribe button
+			elif '__button_dislike_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				s_ugc = int(ne[2])					# isolate the ugc and make it an int
+				mod_rating = get_user_rating_by_ugc(pvu, s_ugc)	# get mod rating
+				if mod_rating >= 0:	# if mod is not disliked, send request to dislike it
+					resp = pvu.modio_rate_mod(s_ugc, dislike=True)
+				else: 	# if mod is disliked, send request to un-dislike it
+					resp = pvu.modio_rate_mod(s_ugc)
+
+				# check if mod rating was updated, set button colors/text depending on state
+				if resp == True:
+					if mod_rating >= 0:
+						all_mods_window[event].Update(text='Disliked', button_color=actv_red)
+						all_mods_window[event.replace('dislike','like')].Update(button_color=default_btn)
+					else:
+						all_mods_window[event].Update(text='Dislike', button_color=default_btn)
+				# update the user ratings before continuing
+				update_user_ratings(pvu)
+
+
+		###### handle other windows (do nothing)			
 		else:
 			pass
+
 	# close the main window
 	main_window.close()
 
@@ -708,6 +1087,7 @@ if __name__ == "__main__":
 
 	# create pavlov updater object from saved settings
 	pavlov_updater = pavlovupdater.PavlovUpdater(settings['pavlov_mod_dir_path'], settings['modio_api_token'], logger)
+
 	try:
 		# launch gui main menu
 		while True:
