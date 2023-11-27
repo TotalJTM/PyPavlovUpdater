@@ -8,7 +8,7 @@ import requests
 
 
 major_vers = 1
-minor_vers = 3
+minor_vers = 4
 
 class PavlovUpdater:
 	# need to initialize the class with:

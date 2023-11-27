@@ -13,7 +13,7 @@ import requests
 
 
 major_vers = 1
-minor_vers = 3
+minor_vers = 4
 
 ### a few sets of functions to minimize the amount of API calls ###
 # globally defined full pavlov mod array 
@@ -98,9 +98,6 @@ user_ratings = None
 def update_user_ratings(pvu):
 	global user_ratings
 	user_ratings = pvu.get_modio_user_ratings()
-	# if len(user_ratings) == 0:
-	# 	logger.error('No installed mods found')
-	# 	sg.Popup('Could not find installed mods, check that mod directory is valid. Disregard if intentional.', non_blocking=True, keep_on_top =True)
 # function to get modlist without defining global
 def get_user_ratings(pvu):
 	global user_ratings
@@ -142,20 +139,15 @@ popup_title = 'PyPavlovUpdater Popup'
 # global dict to hold created images (so they dont have to get loaded again)
 image_bios = {}
 download_popup_occured = False
-# like/dislike button colors
-actv_green = ('white', 'green')
-actv_red = ('white', 'red')
-default_btn = ('white', '#082567')
-# define the layout for mod lists
-def make_mod_item_frame(pvu, mod, subbed_menu=True):
+def load_modio_image(pvu, modid, logo_url):
 	global image_bios, download_popup_occured
 	# make locals folder to store mod thumbnails
 	if not os.path.exists('local'):
 		os.mkdir('local')
 	# check if the image has already been loaded
-	if str(mod['id']) not in image_bios:
+	if str(modid) not in image_bios:
 		# make an address, check if it exists
-		logo_faddr = f'local/UGC{mod["id"]}_logo.png'
+		logo_faddr = f'local/UGC{modid}_logo.png'
 		if not os.path.exists(logo_faddr):
 			if not download_popup_occured:
 				download_popup_occured = True
@@ -163,7 +155,7 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 
 			try:
 				# download an image and write it to faddr
-				image_bin = pvu.get_modio_image(mod['logo'])
+				image_bin = pvu.get_modio_image(logo_url)
 				with open(logo_faddr, 'wb') as f:
 					f.write(image_bin)
 			except Exception as e:
@@ -177,7 +169,20 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 		bio = io.BytesIO()
 		image.save(bio, format="PNG")
 
-		image_bios[str(mod['id'])] = bio
+		image_bios[str(modid)] = bio
+
+		return bio
+	else:
+		return image_bios[str(modid)]
+
+# like/dislike button colors
+actv_green = ('white', 'green')
+actv_red = ('white', 'red')
+default_btn = ('white', '#082567')
+# define the layout for mod lists
+def make_mod_item_frame(pvu, mod, subbed_menu=True):
+	
+	image = load_modio_image(pvu, mod['id'], mod['logo'])
 
 	user_mod_rating = get_user_rating_by_ugc(pvu, mod['id'])
 
@@ -186,7 +191,7 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 
 	# image on the left
 	col_left = [
-		[sg.Image(data=image_bios[str(mod['id'])].getvalue())]
+		[sg.Image(data=image.getvalue())]
 	]
 	# mod information next to the image
 	if subbed_menu:
