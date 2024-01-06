@@ -13,7 +13,7 @@ import requests
 
 
 major_vers = 1
-minor_vers = 4
+minor_vers = 5
 
 ### a few sets of functions to minimize the amount of API calls ###
 # globally defined full pavlov mod array 
@@ -194,21 +194,23 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 		[sg.Image(data=image.getvalue())]
 	]
 	# mod information next to the image
-	if subbed_menu:
-		col_mid = [
-			[sg.Text(f"{mod['name']:50s}")],
-			[sg.Text(f"By {mod['maker']}")],
-			[sg.Text(f"Version: {mod['modfile']['version']}")],
-			[sg.Text(f"Last Updated {date_str}")],
-			[sg.Text(f"Type {mod['type']}")],
-		]
-	else:
-		col_mid = [
-			[sg.Text(f"{mod['name']:50s}")],
-			[sg.Text(f"By {mod['maker']}")],
-			[sg.Text(f"Last Updated {date_str}")],
-			[sg.Text(f"Type {mod['type']}")],
-		]
+	# if subbed_menu:
+	col_mid = [
+		[sg.Text(f"{mod['name']:50s}", pad=(0,0), font='Default 10 bold')],
+		[sg.Text(f"By {mod['maker']}", pad=(0,0))],
+		[sg.Text(f"Version: {mod['modfile']['version']}", pad=(0,0))],
+		[sg.Text(f"Last Updated {date_str}", pad=(0,0))],
+		[sg.Text(f"Type {mod['type']}", pad=(0,0))],
+		[sg.Text(f"Size {round(mod['modfile']['filesize']/1e6, 1)} MB", pad=(0,0))],
+	]
+	# else:
+	# 	col_mid = [
+	# 		[sg.Text(f"{mod['name']:50s}", pad=(0,0)), font='Default 10 bold'],
+	# 		[sg.Text(f"By {mod['maker']}", pad=(0,0))],
+	# 		[sg.Text(f"Last Updated {date_str}", pad=(0,0))],
+	# 		[sg.Text(f"Type {mod['type']}", pad=(0,0))],
+	# 		[sg.Text(f"Size {round(mod['modfile']['filesize']/1e6, 1)} MB", pad=(0,0))],
+	# 	]
 	# mod options on the right
 	subbed_status = True if retrieve_subscribed_mod_by_ugc(pvu, mod['id']) != None else False
 	col_right = [
@@ -236,6 +238,7 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 
 	# get list of subscribed mods
 	mods = get_subscribed_mods(pvu)
+	orig_modlist = mods
 	if mods == None:
 		return sg.Window(f'Subscribed Mods', [[sg.Text('Could not get subscribed mod list')]], finalize=True, size=(350,75))
 
@@ -311,7 +314,7 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 
 	# make the larger subscribed mod window layout with the newly assembled mod layout
 	assembled_layout = [
-		[sg.Text(f'{len(mods)-len(miscompares)-len(not_installed)}/{len(mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'),
+		[sg.Text(f'{len(orig_modlist)-len(miscompares)-len(not_installed)}/{len(orig_modlist)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'),
 			sg.Column([[]], expand_x=True), 
 			sg.Button(f'Subscribe to nonsubscribed-but-installed mods [{len(not_subscribed)}]', key='__button_subto_installed__'),
 			sg.Button('Refresh Modlist', key='__button_subbed_refresh__'),],
@@ -429,9 +432,10 @@ def make_download_window(pvu):
 	# define a lot of arrays that will be columns
 	ugc_col = ['UGC']
 	modfile_id = ['ModfileID']
+	mod_type_col = ['Type']
 	name_col = ['Name']
 	author_col = ['Author']
-	size_col = ['Download Size (kb)']
+	size_col = ['Download Size (MB)']
 
 	# start to fill those arrays with mod data
 	for mod in miscompares:
@@ -439,14 +443,16 @@ def make_download_window(pvu):
 		modfile_id.append(mod['modfile']['id'])
 		name_col.append(mod['name'])
 		author_col.append(mod['maker'])
-		size_col.append(round(mod['modfile']['filesize']/1024, 1))
+		size_col.append(round(mod['modfile']['filesize']/1e6, 1))
+		mod_type_col.append(mod['type'])
 
 	for mod in not_installed:
 		ugc_col.append(mod['id'])
 		modfile_id.append(mod['modfile']['id'])
 		name_col.append(mod['name'])
 		author_col.append(mod['maker'])
-		size_col.append(round(mod['modfile']['filesize']/1024, 1))
+		size_col.append(round(mod['modfile']['filesize']/1e6, 1))
+		mod_type_col.append(mod['type'])
 
 	# make a mod array into a formatted column of Text() objects
 	def make_column(mod_texts, expand_x=False):
@@ -456,7 +462,7 @@ def make_download_window(pvu):
 		return sg.Column(new)
 	
 	# layout the checkbox column (with formatted keys for event/value handling)
-	checkbox_col_layout = [[sg.Text('Download?', pad=(10,1))]]
+	checkbox_col_layout = [[sg.Text('Install', pad=(10,1))]]
 	for i, ugc in enumerate(ugc_col):
 		# hack so the array can be used for table headers
 		if i==0:
@@ -475,6 +481,7 @@ def make_download_window(pvu):
 
 	# format the table holding mod data and checkboxes
 	table_layout = [make_column(ugc_col),sg.VerticalSeparator(),
+				make_column(mod_type_col),sg.VerticalSeparator(),
 				make_column(name_col, expand_x=True),sg.VerticalSeparator(),
 				make_column(author_col),sg.VerticalSeparator(),
 				make_column(size_col),sg.VerticalSeparator(),
@@ -606,6 +613,23 @@ def get_latest_program_version():
 			maj, min = name.strip('V').split('_')
 			return maj, min
 		return None, None
+	
+def subscribe_to_mod_dependencies(pvu, id):
+	# check if there are mod dependencies
+	mod_dependencies = pvu.get_mod_dependencies(id)
+	successful_subs = 0
+
+	if len(mod_dependencies) > 0:
+		sub_to_dependencies = sg.popup_yes_no(f'There are {len(mod_dependencies)} dependent mods, would you like to subscribe to them?', title='Subscribe to Dependencies', non_blocking=False, keep_on_top =True)
+		if sub_to_dependencies == 'yes':
+			for dependency in mod_dependencies:
+				resp = pvu.modio_post(f'games/{pvu.pavlov_gameid}/mods/{dependency["id"]}/subscribe', ret_json=False)
+				if resp.status_code != 201:
+					sg.popup_ok(f'Could not subscribe to dependency:\n{dependency["name"]}\nMod ID: {dependency["id"]}', title='Subscribe to Dependencies', non_blocking=True, keep_on_top =True)
+				else:
+					successful_subs += 1
+	return successful_subs
+
 
 # main menu for the pavlov mod updater
 def mainmenu(configManager, pvu):
@@ -636,16 +660,18 @@ def mainmenu(configManager, pvu):
 
 	# function for use when downloading mods (window callback to update progress bar)
 	# update text/progress bar depending on callbacks within the PavlovUpdater
-	def download_window_func(value):
+	def download_window_func(mb, value):
 		if value == -3:
 			downloading_window['__text_updates__'].update('Getting mod data from Mod.io.')
+			downloading_window['__progress_bar__'].UpdateBar(0)
 		if value == -2:
 			downloading_window['__text_updates__'].update('Removing old directories.')
 		if value == -1:
 			downloading_window['__text_updates__'].update('Connecting to Mod.io to download mod.')
 		if value == 0:
-			downloading_window['__text_updates__'].update('Downloading mod.')
+			downloading_window['__text_updates__'].update(f'Downloading mod: 0/{round(mb,1)}mb')
 		if value > 0 and value <= 100.00:
+			downloading_window['__text_updates__'].update(f'Downloading mod: {round((mb/100)*value,1)}/{round(mb,1)}mb')
 			downloading_window['__progress_bar__'].UpdateBar(value)
 		if value == 100.0:
 			downloading_window['__text_updates__'].update('File Downloaded! Replacing Old Mod.')
@@ -873,7 +899,11 @@ def mainmenu(configManager, pvu):
 								success += 1
 								continue
 						not_success.append(f' - UGC{ugc}')
-					
+
+						# check if there are mod dependencies
+						subbed_num = subscribe_to_mod_dependencies(pvu, ugc)
+						success += subbed_num
+
 					if len(not_success) == 0:
 						popup_text = f'Successfully subscribed to {success} mods'
 					else:
@@ -911,6 +941,9 @@ def mainmenu(configManager, pvu):
 				if resp.status_code == 201:
 					subscribed_window[event].Update(visible=False)
 					subscribed_window[event.replace('sub', 'unsub')].Update(visible=True)
+
+					# check if there are mod dependencies
+					subscribe_to_mod_dependencies(pvu, ne[2])
 
 			# unsub from a mod and unhide the subscribe button
 			elif '__button_like_' in event:
@@ -1025,6 +1058,9 @@ def mainmenu(configManager, pvu):
 				if resp.status_code == 201:
 					all_mods_window[event].Update(visible=False)
 					all_mods_window[event.replace('sub', 'unsub')].Update(visible=True)
+
+					# check if there are mod dependencies
+					subscribe_to_mod_dependencies(pvu, ne[2])
 
 			# unsub from a mod and unhide the subscribe button
 			elif '__button_like_' in event:

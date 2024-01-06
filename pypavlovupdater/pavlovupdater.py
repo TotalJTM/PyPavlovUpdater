@@ -32,7 +32,7 @@ class PavlovUpdater:
 		self.logger.info(f'Get request {route}')
 		# assemble address and header
 		addr = f"{self.modio_api_url}/{route}"
-		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'}
+		head = {'Authorization': f'Bearer {self.modio_api_token}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'X-Modio-Platform': self.target_os}
 		# send request
 		response = requests.get(addr if raw==False else route, params={}, headers=head)
 		# convert the response to a json dict
@@ -123,6 +123,31 @@ class PavlovUpdater:
 				if item['game_id'] == int(self.pavlov_gameid):
 					rating_dict[item['mod_id']] = item['rating']
 			return rating_dict
+		
+	# get the user ratings from modio and strip it of non-pavlov games
+	def get_mod_dependencies(self, ugc):
+		resp = self.modio_get(f'games/{self.pavlov_gameid}/mods/{ugc}/dependencies?recursive=true', ret_json=False)
+		if resp.status_code != 200:
+			return []
+		else:
+			decoded_cont = resp.json()
+			mods = []
+			for m in decoded_cont["data"]:
+				new_dependancy = {
+					'id':m['mod_id'], 
+					'name':m['name'],
+					'name_id':m['name_id'], 
+					# 'maker':m['submitted_by']['username'], 
+					'date_added':m['date_added'], 
+					# 'date_updated':m['date_updated'], 
+					# 'date_live':m['date_live'], 
+					# 'description':m['description_plaintext'],
+					# 'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
+					# 'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
+					# 'dependencies': m['dependencies'],
+				}
+				mods.append(new_dependancy)
+			return mods
 
 	# get the full modlist for Pavlov
 	def get_pavlov_modlist(self):
@@ -149,8 +174,7 @@ class PavlovUpdater:
 			
 			if modfile_live_win == None:
 				return None
-
-			# print(m)
+			
 			# attributes in a subscribed modlist entry
 			return {
 				'id':m['id'], 
@@ -163,6 +187,15 @@ class PavlovUpdater:
 				'description':m['description_plaintext'],
 				'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
 				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
+				'dependencies': m['dependencies'],
+				'modfile':{
+					'id': modfile_live_win,
+					'date_added':m['modfile']['date_added'],
+					'filesize':m['modfile']['filesize'], 	# bytes
+					'filehash':m['modfile']['filehash'],
+					'version':m['modfile']['version'],
+					'binary_url':m['modfile']['download']['binary_url'],
+				},
 			}
 
 		# go through response and make/add entrys to the mods arr
@@ -222,6 +255,10 @@ class PavlovUpdater:
 			
 			if modfile_live_win == None:
 				return None
+			
+			# modfile_details = None
+			# for d in m['modfile']:
+			# 	if d['platforms']:
 
 			# attributes in a subscribed modlist entry
 			return {
@@ -235,14 +272,15 @@ class PavlovUpdater:
 				'description':m['description_plaintext'],
 				'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
 				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
+				'dependencies': m['dependencies'],
 				'modfile':{
 					'id': modfile_live_win,
 					'date_added':m['modfile']['date_added'],
-					'filesize':m['modfile']['filesize'],
+					'filesize':m['modfile']['filesize'], 	# bytes
 					'filehash':m['modfile']['filehash'],
 					'version':m['modfile']['version'],
 					'binary_url':m['modfile']['download']['binary_url'],
-				}
+				},
 			}
 
 		# go through response and make/add entrys to the mods arr
@@ -348,7 +386,7 @@ class PavlovUpdater:
 			# got file info
 			# code to support gui
 			if code_to_run_during_download != None:
-				code_to_run_during_download(-3)
+				code_to_run_during_download(0, -3)
 
 			# get mod file information
 			resp = self.modio_get(f'games/3959/mods/{ugc}/files/{version}')
@@ -358,7 +396,7 @@ class PavlovUpdater:
 			# got file info
 			# code to support gui
 			if code_to_run_during_download != None:
-				code_to_run_during_download(-2)
+				code_to_run_during_download(0, -2)
 
 			# check the virus status of the file
 			if resp['virus_positive'] != 0:
@@ -368,7 +406,7 @@ class PavlovUpdater:
 			# made dir
 			# code to support gui
 			if code_to_run_during_download != None:
-				code_to_run_during_download(-1)
+				code_to_run_during_download(0, -1)
 
 			# this code segment is from this site: https://www.alpharithms.com/progress-bars-for-python-downloads-580122/
 			# use a context manager to make an HTTP request and file
@@ -383,7 +421,7 @@ class PavlovUpdater:
 				# tell gui the download has begun
 				# code to support gui
 				if code_to_run_during_download != None:
-					code_to_run_during_download(0)
+					code_to_run_during_download(0, 0)
 				else:
 					self.logger.info('Downloading mod')
 
@@ -406,7 +444,7 @@ class PavlovUpdater:
 						if code_to_run_during_download != None:
 							if c+1 > last_c:
 								last_c += 1
-								code_to_run_during_download(c)
+								code_to_run_during_download(total_size/1e6, c)
 						else:
 							# write current % to console, pause for .1ms, then flush console
 							if c > last_std_write+0.1:
@@ -422,7 +460,7 @@ class PavlovUpdater:
 			
 			# tell the gui the download is complete
 			if code_to_run_during_download != None: 
-				code_to_run_during_download(100.0)
+				code_to_run_during_download(0, 100.0)
 
 
 			# check if the mod directory exists
