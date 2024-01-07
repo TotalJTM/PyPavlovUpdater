@@ -589,6 +589,10 @@ class PavlovUpdater:
 			for modid in not_subscribed:
 				self.logger.info(f'-- Subscribing to UGC{modid} --')
 				resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{modid}/subscribe')
+				mod_dependencies = self.get_mod_dependencies(modid)
+				for dependency in mod_dependencies:
+					self.logger.info(f'-- Subscribing to UGC{dependency["id"]} (dependency of {modid} --')
+					resp = self.modio_post(f'games/{self.pavlov_gameid}/mods/{dependency["id"]}/subscribe', ret_json=False)
 			pass
 
 if __name__ == "__main__":

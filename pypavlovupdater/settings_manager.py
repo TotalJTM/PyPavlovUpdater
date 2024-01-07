@@ -33,6 +33,12 @@ class Conf_Manager:
 
 					if 'pavlov_mod_dir_path' in varname:
 						d['pavlov_mod_dir_path'] = self.process_varconts(varcont)[0]
+
+					if 'mods_per_page' in varname:
+						try:
+							d['mods_per_page'] = int(self.process_varconts(varcont)[0])
+						except:
+							d['mods_per_page'] = 50
 			return d
 		except:
 			self.logger.exception(f'Exception when processing file')
@@ -41,7 +47,7 @@ class Conf_Manager:
 	# create a new configuration file 
 	# can supply api token and mod dir to write into the configuration before closing it
 	# primary means of updating configuration from program, call os.remove('PPU.conf') before using
-	def make_new_conf_file(self, modio_api_token=None, pavlov_mod_dir_path=None):
+	def make_new_conf_file(self, modio_api_token=None, pavlov_mod_dir_path=None, mods_per_page=None):
 		conf_file = open(self.fileaddr, 'x+')
 
 		conts = f"""# =*=*=*=*=   PyPavlovUpdater.exe   =*=*=*=*=
@@ -67,6 +73,11 @@ modio_api_token = "{modio_api_token if modio_api_token != None else ''}"
 #       This must be a valid path in quotes
 
 pavlov_mod_dir_path = "{pavlov_mod_dir_path if pavlov_mod_dir_path != None else ''}"
+
+#       mods_per_page Number of mods that will be loaded per window 
+#       This must be a number without quotes
+
+mods_per_page = "{mods_per_page if mods_per_page != None else 50}"
 """
 		conf_file.writelines(conts)
 		conf_file.close()

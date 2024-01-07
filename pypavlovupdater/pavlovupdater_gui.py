@@ -10,6 +10,7 @@ import io
 import PySimpleGUI as sg
 from PIL import Image
 import requests
+import pyperclip
 
 
 major_vers = 1
@@ -218,6 +219,7 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 		[sg.Button('Sub', key=f'__button_sub_{mod["id"]}__', visible=(not subbed_status), expand_x=True)],
 		[sg.Button('Like' if user_mod_rating <= 0 else 'Liked', key=f'__button_like_{mod["id"]}__', button_color=None if user_mod_rating <= 0 else actv_green, expand_x=True)],
 		[sg.Button('Dislike' if user_mod_rating >= 0 else 'Disliked', key=f'__button_dislike_{mod["id"]}__', button_color=None if user_mod_rating >= 0 else actv_red, expand_x=True)],
+		[sg.Button('CopyURL', key=f'__button_copy_url_{mod["id"]}__', expand_x=True)],
 	]
 
 	# lay out columns of above elements to go in frame
@@ -229,21 +231,25 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 	# return the assembled frame
 	return sg.Frame(f"UGC{mod['id']}", conts, expand_x=True, pad=(0,5))
 
-mods_per_page = 50
-
 # define layout for the subscribed tab
-def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
+def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per_page=50):
 	# update user ratings 
 	ratings = update_user_ratings(pvu)
 
 	# get list of subscribed mods
 	mods = get_subscribed_mods(pvu)
+	installed_mods = get_installed_mods(pvu)
 	orig_modlist = mods
 	if mods == None:
 		return sg.Window(f'Subscribed Mods', [[sg.Text('Could not get subscribed mod list')]], finalize=True, size=(350,75))
 
+	filter_command = any([
+		filter_type == 'Installed',
+		filter_type == 'Not-Installed',
+	])
+
 	# if there is a mod filter, trim the mod list before beginning pagination
-	if mod_filter != None:
+	if mod_filter != None or filter_command:
 		filtered_mods = []
 		for mod in mods:
 			# continue if mod filter input is not in the mod attribute
@@ -255,6 +261,12 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 					continue
 			if filter_type == 'UGC':
 				if mod_filter.lower() not in str(mod['id']):
+					continue
+			if filter_type == 'Installed':
+				if mod['id'] not in installed_mods:
+					continue
+			if filter_type == 'Not-Installed':
+				if mod['id'] in installed_mods:
 					continue
 			filtered_mods.append(mod)
 
@@ -272,8 +284,6 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 	mods_page_ind_offset = mods_per_page if len(mods) > (mods_per_page+mod_page_ind) else (len(mods)-mod_page_ind)
 	# reduce mod list to the paginated mods
 	mods = mods[mod_page_ind:mod_page_ind+mods_per_page]
-	# get list of installed mods
-	installed_mods = get_installed_mods(pvu)
 
 	# find mods that are 1) not latest version, 2) not installed, 3) installed but not subscribed
 	miscompares, not_installed, not_subscribed = get_miscompares(pvu)
@@ -297,7 +307,7 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 	mods_layout_arr = [[sg.Column(mods_left, key='__subbed_mods_left__', vertical_alignment='top'), sg.Column(mods_right, key='__subbed_mods_right__', vertical_alignment='top')]]
 
 	# filter modlist and make sure filter elements have an expected fallback value for display
-	filter_modlist = ['Name','UGC','Author']
+	filter_modlist = ['Name','UGC','Author','Installed','Not-Installed']
 	filter_type = filter_type if filter_type != None else filter_modlist[0]
 	mod_filter = mod_filter if mod_filter != None else ''
 
@@ -328,7 +338,7 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 
 
 # define layout for the all-mod tab
-def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
+def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per_page=50):
 	# update user ratings 
 	ratings = update_user_ratings(pvu)
 
@@ -337,8 +347,13 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 	if mods == None:
 		return sg.Window(f'All Mods', [[sg.Text('Could not get full mod list')]], finalize=True, size=(350,75))
 
+	filter_command = any([
+		filter_type == 'Installed',
+		filter_type == 'Not-Installed',
+	])
+
 	# if there is a mod filter, trim the mod list before beginning pagination
-	if mod_filter != None:
+	if mod_filter != None or filter_command:
 		filtered_mods = []
 		for mod in mods:
 			# continue if mod filter input is not in the mod attribute
@@ -350,6 +365,11 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 					continue
 			if filter_type == 'UGC':
 				if mod_filter.lower() not in str(mod['id']):
+					continue
+			if filter_type == 'Not-Subscribed':
+				subbed_mods = get_subscribed_mods(pvu)
+				subscribed_mod_ids = [id for subbed_mods['id'] in subbed_mods]
+				if mod['id'] in subscribed_mod_ids:
 					continue
 			filtered_mods.append(mod)
 
@@ -367,8 +387,6 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 	mods_page_ind_offset = mods_per_page if len(mods) > (mods_per_page+mod_page_ind) else (len(mods)-mod_page_ind)
 	# reduce mod list to the paginated mods
 	mods = mods[mod_page_ind:mod_page_ind+mods_per_page]
-	# get list of installed mods
-	installed_mods = get_installed_mods(pvu)
 
 	# make all of the mods into mod_item_layout items
 	mods_left = []
@@ -389,7 +407,7 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None):
 	mods_layout_arr = [[sg.Column(mods_left, key='__all_mod_mods_left__', vertical_alignment='top'), sg.Column(mods_right, key='__all_mod_mods_right__', vertical_alignment='top')]]
 
 	# filter modlist and make sure filter elements have an expected fallback value for display
-	filter_modlist = ['Name','UGC','Author']
+	filter_modlist = ['Name','UGC','Author','Not-Subscribed']
 	filter_type = filter_type if filter_type != None else filter_modlist[0]
 	mod_filter = mod_filter if mod_filter != None else ''
 
@@ -526,6 +544,8 @@ def load_settings(configManager):
 		conf_dict['modio_api_token'] = ''
 	if 'pavlov_mod_dir_path' not in conf_dict:
 		conf_dict['pavlov_mod_dir_path'] = ''
+	if 'mods_per_page' not in conf_dict:
+		conf_dict['mods_per_page'] = ''
 
 	# attempt to use the default pavlov mod dir path
 	if conf_dict['pavlov_mod_dir_path'] == '':
@@ -536,9 +556,9 @@ def load_settings(configManager):
 	return conf_dict
 
 # save settings file through settings manager
-def save_settings(api_token, mod_dir, configManager):
+def save_settings(api_token, mod_dir, mod_num, configManager):
 	os.remove('PPU.conf')
-	configManager.make_new_conf_file(api_token, mod_dir)
+	configManager.make_new_conf_file(api_token, mod_dir, mod_num)
 
 # define layout for the options/settings tab
 def make_options_window(sets):
@@ -547,6 +567,7 @@ def make_options_window(sets):
 		return sg.Column([
 			[sg.Text('Pavlov Mod Directory Path: ')],
 			[sg.Text('Mod.io API Key: ')],
+			[sg.Text('Mods Per Page: ')],
 		], element_justification='right')
 	# right side column for input fields
 	def options_input_col():
@@ -554,6 +575,7 @@ def make_options_window(sets):
 		return sg.Column([
 			[sg.Input(sets['pavlov_mod_dir_path'], key='__input_settings_mod_dir__', expand_x=True)],
 			[sg.Input(sets['modio_api_token'], key='__input_settings_api_key__', password_char='*', expand_x=True)],
+			[sg.Input(sets['mods_per_page'], key='__input_settings_mod_num__', expand_x=True)],
 		], expand_x=True)
 
 	# help text for options window
@@ -708,6 +730,9 @@ def mainmenu(configManager, pvu):
 		text += 'Use the Options Menu to set these settings, then you can download mods'
 		sg.Popup(text, non_blocking = True, keep_on_top = True, title = 'Settings Error')
 
+	# load settings for menus
+	settings = load_settings(configManager)
+
 	# main gui loop
 	while True:
 		# get gui events
@@ -729,8 +754,7 @@ def mainmenu(configManager, pvu):
 			if event == sg.WIN_CLOSED:
 				break
 			# handle button events to open windows
-			elif event == '__button_open_options_window__' and options_window == None:
-				settings = load_settings(configManager)
+			if event == '__button_open_options_window__' and options_window == None:
 				options_window = make_options_window(settings)
 			elif event == '__button_open_download_window__' and download_window == None:
 				try:
@@ -738,9 +762,9 @@ def mainmenu(configManager, pvu):
 				except Exception:
 					logging.exception("Error")
 			elif event == '__button_open_subscribed_window__' and subscribed_window == None:
-				subscribed_window = make_sub_mod_window(pvu)
+				subscribed_window = make_sub_mod_window(pvu, mods_per_page=settings['mods_per_page'])
 			elif event == '__button_open_all_mod_window__' and all_mods_window == None:
-				all_mods_window = make_all_mod_window(pvu)
+				all_mods_window = make_all_mod_window(pvu, mods_per_page=settings['mods_per_page'])
 
 		###### handle options window events
 		elif window == options_window:
@@ -753,8 +777,7 @@ def mainmenu(configManager, pvu):
 				# get new values
 				mod_dir = options_window['__input_settings_mod_dir__'].get()
 				api_key = options_window['__input_settings_api_key__'].get()
-				# update PPU.conf installation
-				save_settings(api_key, mod_dir, configManager)
+				mod_num = options_window['__input_settings_mod_num__'].get()
 				# update PavlovUpdater object with updated settings
 				pvu.pavlov_mod_dir_path = mod_dir
 				pvu.modio_api_token = api_key
@@ -773,6 +796,12 @@ def mainmenu(configManager, pvu):
 					sg.Popup('The Mod.io API key you entered is not valid.', keep_on_top = True, title = 'Settings Error')
 				else:
 					good_settings.append('Mod.io API Key')
+				# check if mod_num is a number
+				try:
+					mod_num = int(mod_num)
+					good_settings.append('Mods Per Page')
+				except:
+					mod_num = 50
 
 				if good_settings:
 					text = 'The following settings are valid and saved:\n'
@@ -784,6 +813,10 @@ def mainmenu(configManager, pvu):
 					if len(good_settings) == 2:
 						options_window.close()
 						options_window = None
+
+				# update PPU.conf installation
+				save_settings(api_key, mod_dir, mod_num, configManager)
+				settings = load_settings(configManager)
 
 		###### handle download window events
 		elif window == download_window:
@@ -918,7 +951,7 @@ def mainmenu(configManager, pvu):
 					update_subscribed_mods(pvu)
 
 				# make the new subscribed mod window with page, filter input and filter combobox inputs
-				subscribed_window = make_sub_mod_window(pvu, page, filt, filt_type)
+				subscribed_window = make_sub_mod_window(pvu, page, filt, filt_type, settings['mods_per_page'])
 
 				# do the popup if the object changed
 				if popup_text != None:
@@ -944,6 +977,13 @@ def mainmenu(configManager, pvu):
 
 					# check if there are mod dependencies
 					subscribe_to_mod_dependencies(pvu, ne[2])
+
+			# copy the url for the mod.io page to the users clipboard
+			elif '__button_copy_url_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				mod_result = retrieve_subscribed_mod_by_ugc(pvu, int(ne[3]))
+				if mod_result:
+					pyperclip.copy(f"https://mod.io/g/pavlov/m/{mod_result['name_id']}")
 
 			# unsub from a mod and unhide the subscribe button
 			elif '__button_like_' in event:
@@ -1035,7 +1075,7 @@ def mainmenu(configManager, pvu):
 					update_subscribed_mods(pvu)
 
 				# make the new subscribed mod window with page, filter input and filter combobox inputs
-				all_mods_window = make_all_mod_window(pvu, page, filt, filt_type)
+				all_mods_window = make_all_mod_window(pvu, page, filt, filt_type, settings['mods_per_page'])
 
 				# do the popup if the object changed
 				if popup_text != None:
@@ -1061,6 +1101,13 @@ def mainmenu(configManager, pvu):
 
 					# check if there are mod dependencies
 					subscribe_to_mod_dependencies(pvu, ne[2])
+
+			# copy the url for the mod.io page to the users clipboard
+			elif '__button_copy_url_' in event:
+				ne = event.strip('__').split('_')	# split event name to get ugc
+				mod_result = retrieve_full_mod_by_ugc(pvu, int(ne[3]))
+				if mod_result:
+					pyperclip.copy(f"https://mod.io/g/pavlov/m/{mod_result['name_id']}")
 
 			# unsub from a mod and unhide the subscribe button
 			elif '__button_like_' in event:
