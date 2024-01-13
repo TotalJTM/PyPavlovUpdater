@@ -455,7 +455,7 @@ class PavlovUpdater:
 
 					# write 100% to the terminal
 					if code_to_run_during_download == None:
-						sys.stdout.write(f"\r100.0000%\n")
+						sys.stdout.write(f"\r100.0%\n")
 						sys.stdout.flush()
 			
 			# tell the gui the download is complete

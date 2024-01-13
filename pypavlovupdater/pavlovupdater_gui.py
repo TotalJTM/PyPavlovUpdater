@@ -348,12 +348,10 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 		return sg.Window(f'All Mods', [[sg.Text('Could not get full mod list')]], finalize=True, size=(350,75))
 
 	filter_command = any([
-		filter_type == 'Installed',
-		filter_type == 'Not-Installed',
+		filter_type == 'Not-Subscribed',
 	])
-
 	# if there is a mod filter, trim the mod list before beginning pagination
-	if mod_filter != None or filter_command:
+	if mod_filter != None or filter_command == True:
 		filtered_mods = []
 		for mod in mods:
 			# continue if mod filter input is not in the mod attribute
@@ -368,7 +366,7 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 					continue
 			if filter_type == 'Not-Subscribed':
 				subbed_mods = get_subscribed_mods(pvu)
-				subscribed_mod_ids = [id for subbed_mods['id'] in subbed_mods]
+				subscribed_mod_ids = [subbed_mod['id'] for subbed_mod in subbed_mods]
 				if mod['id'] in subscribed_mod_ids:
 					continue
 			filtered_mods.append(mod)
@@ -480,18 +478,19 @@ def make_download_window(pvu):
 		return sg.Column(new)
 	
 	# layout the checkbox column (with formatted keys for event/value handling)
-	checkbox_col_layout = [[sg.Text('Install', pad=(10,1))]]
+	checkbox_col_layout = [[sg.Text('Install', pad=(2,1))]]
 	for i, ugc in enumerate(ugc_col):
 		# hack so the array can be used for table headers
 		if i==0:
 			continue
 		k = f'__cbox_download_UGC{ugc}_{modfile_id[i]}__'
-		checkbox_col_layout.append([sg.CBox('', key=k, pad=(10,0.5))])
+		checkbox_col_layout.append([sg.CBox('', key=k, pad=(2,0.5))])
 	
 	# start the larger download menu assembly
 	assembled_layout = [
 		[sg.Text(f'{len(subbed_mods)-len(miscompares)-len(not_installed)}/{len(subbed_mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed'),
 			sg.Column([[]], expand_x=True), 
+			sg.Button('Uninstall Mod', key='__button_delete_mod__'), 
 			sg.Button('Refresh Page', key='__button_download_refresh__'),],
 		[sg.Button('Uncheck All', key='__button_download_uncheck_all__',expand_x=True),sg.Button('Check All', key='__button_download_check_all__',expand_x=True),sg.Button('Download Selected', key='__button_download_download__',expand_x=True)],
 		[sg.HorizontalSeparator()],
@@ -609,6 +608,7 @@ You can also find me on the Pavlov Push Discord: https://discord.gg/3ngWgM4TwA
 		[sg.HorizontalSeparator()],
 		[sg.Text('PyPavlovUpdater Settings', justification='center', expand_x=True, font=15)],
 		[sg.HorizontalSeparator()],
+		[sg.Button('Download All Thumbnails', key='__button_get_thumbnails__', expand_x=True)],
 		[options_label_col(), options_input_col()],
 		[sg.Button('Update Settings', key='__button_submit_settings__', expand_x=True, pad=(15,15))],
 	]
@@ -652,6 +652,18 @@ def subscribe_to_mod_dependencies(pvu, id):
 					successful_subs += 1
 	return successful_subs
 
+def remove_installed_mod(pvu, ugc, mod_path):
+	installed = get_installed_mods(pvu)
+	try:
+		if int(ugc) in installed:
+			pvu.remove_items_from_dir(f'{mod_path}\\UGC{ugc}', rm_dir=True)
+			sg.popup('Mod has been removed from your installed mods.')
+		else:
+			sg.popup('No map is installed with that UGC')
+
+	except:
+		sg.popup('There was an issue removing the mod.\nCheck that submitted map id matches the target map id.')
+		logger.exception(f'Exception encountered removing mod with id {ugc}')
 
 # main menu for the pavlov mod updater
 def mainmenu(configManager, pvu):
@@ -768,7 +780,7 @@ def mainmenu(configManager, pvu):
 
 		###### handle options window events
 		elif window == options_window:
-			# handle closing window
+			# handle closing window 
 			if event == sg.WIN_CLOSED:
 				options_window.close()
 				options_window = None
@@ -817,6 +829,26 @@ def mainmenu(configManager, pvu):
 				# update PPU.conf installation
 				save_settings(api_key, mod_dir, mod_num, configManager)
 				settings = load_settings(configManager)
+
+			# handle button that gets downloads all image thumbnails
+			elif event == '__button_get_thumbnails__':
+				full_mods = get_full_mods(pvu)
+				# make locals folder to store mod thumbnails
+				if not os.path.exists('local'):
+					os.mkdir('local')
+				file_num = 0
+				for path, folders, files in os.walk('local'):
+					file_num = len(files)
+					break
+
+				rough_total = len(full_mods)-file_num # sloppy implementation, need to compare downloaded thumbnails to full mod list (extra thumbnails from deleted mods)
+				c = sg.popup_yes_no(f'About to download ~{rough_total if rough_total > 0 else 0} image thumbnails.\nThis will take a while.\nWould you like to continue?')
+				if c == 'Yes':
+					sg.popup('Now downloading image thumbnails. The program will become unresponsive until finished.', non_blocking = True)
+					for mod in full_mods:
+						image = load_modio_image(pvu, mod['id'], mod['logo'])
+					sg.popup('All image thumbnails downloaded!', non_blocking = True, keep_on_top = True)
+					
 
 		###### handle download window events
 		elif window == download_window:
@@ -879,6 +911,12 @@ def mainmenu(configManager, pvu):
 				update_installed_mods(pvu)
 				update_miscompares(pvu)
 				download_window = make_download_window(pvu)
+			elif event == '__button_delete_mod__':
+				mod_id = sg.popup_get_text('Enter the ID of the mod you would like uninstalled.\nUse the subscribed mod or full mod page to get the UGC number.')
+				if mod_id == None:
+					continue
+				ugc = mod_id.strip('UGC').strip('ugc')
+				remove_installed_mod(pvu, ugc, settings['pavlov_mod_dir_path'])
 
 		###### handle subscribed window events
 		elif window == subscribed_window:
@@ -891,7 +929,12 @@ def mainmenu(configManager, pvu):
 			# get the filter data so we can let it persist across screen refreshes
 			filt = subscribed_window['__subbed_filter__'].get()
 			filt_type = subscribed_window['__subbed_filttype__'].get()
-			page = int(subscribed_window['__subbed_page_num__'].get())
+			page_text = subscribed_window['__subbed_page_num__'].get()
+
+			try:
+				page = int(page_text)
+			except:
+				page = 1
 
 			# ensure the input fields have a known value/type 
 			if filt == '':	# filt should be None if there is no filter input
@@ -1036,7 +1079,12 @@ def mainmenu(configManager, pvu):
 			# get the filter data so we can let it persist across screen refreshes
 			filt = all_mods_window['__all_mod_filter__'].get()
 			filt_type = all_mods_window['__all_mod_filttype__'].get()
-			page = int(all_mods_window['__all_mod_page_num__'].get())
+			page_text = all_mods_window['__all_mod_page_num__'].get()
+
+			try:
+				page = int(page_text)
+			except:
+				page = 1
 
 			# ensure the input fields have a known value/type 
 			if filt == '':	# filt should be None if there is no filter input
