@@ -27,24 +27,6 @@ class PavlovUpdater:
 		self.target_os = 'windows'
 		self.logger = logging_obj
 		self.download_threads = 10
-	
-	#Pass in the URL path starting with /
-	def api_get(self, path, headers=-1):
-		if headers == -1:
-			headers = {"Authorization": "Bearer " + self.modio_api_token, "X-Modio-Platform" : self.target_os.lower()}
-		
-		r = requests.get(apiBase + path, headers=headers)
-		if r.status_code != 200:
-			if r.status_code == 429: #Too Many Requests
-				wait = int(r.headers["retry-after"]) + 1
-				self.logger.info(f"Rate limit detected, waiting {wait} seconds to continue")
-				time.sleep(wait)
-				return self.makeAPIRequest(url, headers)
-			else:
-				self.logger.error(f"Request error, code {r.status_code}")
-				#return (None, r.status_code)
-		
-		return r
 
 	# make a get request to modio
 	#	route = address to make request at (ex. games/3959/mods)
