@@ -505,6 +505,7 @@ class PavlovUpdater:
 	# find miscomparisons between modio latest mod versions and installed mod versions
 	#	subscribed_list = list of subscribed mod files (expects output from get_subscribed_modlist())
 	#	installed_list = list of installed mod files (expects output from get_installed_modlist())
+	# todo: make another api call and pull the latest installed-but-not-installed mods data (individual calls or batch?)
 	def find_miscompares_in_modlists(self, subscribed_list, installed_list, printout=True):
 		self.logger.info(f'Finding miscompares')
 		miscompares = []
