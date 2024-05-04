@@ -17,7 +17,7 @@ major_vers = 1
 minor_vers = 5
 
 ### a few sets of functions to minimize the amount of API calls ###
-# globally defined full pavlov mod array 
+# globally defined full pavlov mod array
 full_mods = None
 # function to update modlist
 def update_full_mods(pvu):
@@ -47,7 +47,7 @@ def retrieve_full_mod_by_ugc(pvu, ugc):
 			return entry
 	return None
 
-# globally defined subscribed mod array 
+# globally defined subscribed mod array
 subscribed_mods = None
 # function to update modlist
 def update_subscribed_mods(pvu):
@@ -77,7 +77,7 @@ def retrieve_subscribed_mod_by_ugc(pvu, ugc):
 			return entry
 	return None
 
-# globally defined insatlled mod array 
+# globally defined insatlled mod array
 installed_mods = None
 # function to update modlist
 def update_installed_mods(pvu):
@@ -93,7 +93,7 @@ def get_installed_mods(pvu):
 		update_installed_mods(pvu)
 	return installed_mods
 
-# globally defined user rating dict 
+# globally defined user rating dict
 user_ratings = None
 # function to update modlist
 def update_user_ratings(pvu):
@@ -125,7 +125,7 @@ def update_miscompares(pvu):
 	inst = get_installed_mods(pvu)
 	if subbed == None or inst == None:
 		return None, None, None
-	# if len(not_installed) != 0 and 
+	# if len(not_installed) != 0 and
 	miscompares, not_installed, not_subscribed = pvu.find_miscompares_in_modlists(subbed, inst, printout=False)
 # function to get modlists without defining global
 def get_miscompares(pvu):
@@ -233,7 +233,7 @@ def make_mod_item_frame(pvu, mod, subbed_menu=True):
 
 # define layout for the subscribed tab
 def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per_page=50):
-	# update user ratings 
+	# update user ratings
 	ratings = update_user_ratings(pvu)
 
 	# get list of subscribed mods
@@ -292,7 +292,7 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 	mods_left = []
 	mods_right = []
 	count = 1
-	for mod in mods:			
+	for mod in mods:
 		if count%2 == True:
 			mods_left.append([make_mod_item_frame(pvu, mod, subbed_menu=True)])
 		else:
@@ -312,20 +312,20 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 	mod_filter = mod_filter if mod_filter != None else ''
 
 	button_line = [
-		sg.Text('Filter'), 
-		sg.Combo(filter_modlist, default_value=filter_type, key='__subbed_filttype__'), 
-		sg.Input(mod_filter, key='__subbed_filter__', expand_x=True), 
+		sg.Text('Filter'),
+		sg.Combo(filter_modlist, default_value=filter_type, key='__subbed_filttype__'),
+		sg.Input(mod_filter, key='__subbed_filter__', expand_x=True),
 		sg.Button('Submit', key='__button_subbed_filter__', bind_return_key=True),
 		sg.Button('< Page', key='__button_subbed_page<__'),
-		sg.Input(str(page), key='__subbed_page_num__', size=(3,0)), 
-		sg.Text(f'of {str(num_mod_pages)}'), 
+		sg.Input(str(page), key='__subbed_page_num__', size=(3,0)),
+		sg.Text(f'of {str(num_mod_pages)}'),
 		sg.Button('Page >', key='__button_subbed_page>__'),
 		]
 
 	# make the larger subscribed mod window layout with the newly assembled mod layout
 	assembled_layout = [
 		[sg.Text(f'{len(orig_modlist)-len(miscompares)-len(not_installed)}/{len(orig_modlist)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed, {len(not_subscribed)} Not Subscribed'),
-			sg.Column([[]], expand_x=True), 
+			sg.Column([[]], expand_x=True),
 			sg.Button(f'Subscribe to nonsubscribed-but-installed mods [{len(not_subscribed)}]', key='__button_subto_installed__'),
 			sg.Button('Refresh Modlist', key='__button_subbed_refresh__'),],
 		[sg.HorizontalSeparator()],
@@ -339,7 +339,7 @@ def make_sub_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 
 # define layout for the all-mod tab
 def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per_page=50):
-	# update user ratings 
+	# update user ratings
 	ratings = update_user_ratings(pvu)
 
 	# get list of subscribed mods
@@ -390,7 +390,7 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 	mods_left = []
 	mods_right = []
 	count = 1
-	for mod in mods:			
+	for mod in mods:
 		if count%2 == True:
 			mods_left.append([make_mod_item_frame(pvu, mod, subbed_menu=False)])
 		else:
@@ -410,13 +410,13 @@ def make_all_mod_window(pvu, page=1, mod_filter=None, filter_type=None, mods_per
 	mod_filter = mod_filter if mod_filter != None else ''
 
 	button_line = [
-		sg.Text('Filter'), 
-		sg.Combo(filter_modlist, default_value=filter_type, key='__all_mod_filttype__'), 
-		sg.Input(mod_filter, key='__all_mod_filter__', expand_x=True), 
+		sg.Text('Filter'),
+		sg.Combo(filter_modlist, default_value=filter_type, key='__all_mod_filttype__'),
+		sg.Input(mod_filter, key='__all_mod_filter__', expand_x=True),
 		sg.Button('Submit', key='__button_all_mod_filter__', bind_return_key=True),
 		sg.Button('< Page', key='__button_all_mod_page<__'),
-		sg.Input(str(page), key='__all_mod_page_num__', size=(3,0)), 
-		sg.Text(f'of {str(num_mod_pages)}'), 
+		sg.Input(str(page), key='__all_mod_page_num__', size=(3,0)),
+		sg.Text(f'of {str(num_mod_pages)}'),
 		sg.Button('Page >', key='__button_all_mod_page>__'),
 		]
 
@@ -489,8 +489,8 @@ def make_download_window(pvu):
 	# start the larger download menu assembly
 	assembled_layout = [
 		[sg.Text(f'{len(subbed_mods)-len(miscompares)-len(not_installed)}/{len(subbed_mods)} Up to Date, {len(miscompares)} Out of Date, {len(not_installed)} Not Installed'),
-			sg.Column([[]], expand_x=True), 
-			sg.Button('Uninstall Mod', key='__button_delete_mod__'), 
+			sg.Column([[]], expand_x=True),
+			sg.Button('Uninstall Mod', key='__button_delete_mod__'),
 			sg.Button('Refresh Page', key='__button_download_refresh__'),],
 		[sg.Button('Uncheck All', key='__button_download_uncheck_all__',expand_x=True),sg.Button('Check All', key='__button_download_check_all__',expand_x=True),sg.Button('Download Selected', key='__button_download_download__',expand_x=True)],
 		[sg.HorizontalSeparator()],
@@ -591,7 +591,7 @@ The following settings are needed to use this program:
 Enter these values in the input fields below.
 
 A 'PPU.conf' file and a 'local' folder (that will be filled with images) will be created through the use of this program.
-	Please keep the executable with these items or program settings/downloaded mod thumbnails will need to be 
+	Please keep the executable with these items or program settings/downloaded mod thumbnails will need to be
 	reentered/redownloaded.
 		
 If you run into issues using this program, please let me know through the following:
@@ -601,7 +601,7 @@ If you run into issues using this program, please let me know through the follow
 You can also find me on the Pavlov Push Discord: https://discord.gg/3ngWgM4TwA
 """
 	# return full layout
-	assembled_layout = [  
+	assembled_layout = [
 		[sg.Text('PyPavlovUpdater Program', justification='center', expand_x=True, font=15)],
 		[sg.HorizontalSeparator()],
 		[sg.Text(help_text, enable_events=True)],
@@ -679,7 +679,7 @@ def mainmenu(configManager, pvu):
 					not_latest_vers = False
 			
 			if not_latest_vers:
-				sg.Popup("You are running an outdated version of PyPavlovUpdater.\nYou can download a new version from https://github.com/TotalJTM/PyPavlovUpdater/releases", 
+				sg.Popup("You are running an outdated version of PyPavlovUpdater.\nYou can download a new version from https://github.com/TotalJTM/PyPavlovUpdater/releases",
 				title = 'Out of Date', non_blocking = True, keep_on_top = True)
 	except:
 		logger.exception(f'Exception when getting latest program version')
@@ -722,7 +722,7 @@ def mainmenu(configManager, pvu):
 		[sg.Button(f'Open Options Menu', key='__button_open_options_window__', expand_x=True)],
 		[sg.Button(f'Open Download Menu', key='__button_open_download_window__', expand_x=True)],
 		[sg.Button(f'Open Subscribed Mod Manager', key='__button_open_subscribed_window__', expand_x=True)],
-		[sg.Button(f'Open Full Modlist Explorer', key='__button_open_all_mod_window__', expand_x=True)],	
+		[sg.Button(f'Open Full Modlist Explorer', key='__button_open_all_mod_window__', expand_x=True)],
 	]
 
 	# create the main window instance for the app
@@ -780,7 +780,7 @@ def mainmenu(configManager, pvu):
 
 		###### handle options window events
 		elif window == options_window:
-			# handle closing window 
+			# handle closing window
 			if event == sg.WIN_CLOSED:
 				options_window.close()
 				options_window = None
@@ -876,7 +876,7 @@ def mainmenu(configManager, pvu):
 							mod_details = retrieve_subscribed_mod_by_ugc(pvu, int(download_ugc))
 							downloading_window['__text_name__'].update(mod_details['name'] if mod_details != None else 'Unknown Name')
 							# download the mod (provide callback so this function can update the window without recreating download here)
-							success = pvu.download_modio_file(int(nv[2].strip('UGC')), int(nv[3]), code_to_run_during_download=download_window_func)
+							success = pvu.download_modio_file_threaded(int(nv[2].strip('UGC')), int(nv[3]), code_to_run_during_download=download_window_func)
 							if success != True:
 								sg.popup(f'Could not continue installing mod {nv[2]}, error:\n{success}', non_blocking = True, title = 'Download Error Popup', keep_on_top = True)
 
@@ -936,7 +936,7 @@ def mainmenu(configManager, pvu):
 			except:
 				page = 1
 
-			# ensure the input fields have a known value/type 
+			# ensure the input fields have a known value/type
 			if filt == '':	# filt should be None if there is no filter input
 				filt = None
 
@@ -1086,7 +1086,7 @@ def mainmenu(configManager, pvu):
 			except:
 				page = 1
 
-			# ensure the input fields have a known value/type 
+			# ensure the input fields have a known value/type
 			if filt == '':	# filt should be None if there is no filter input
 				filt = None
 
@@ -1198,7 +1198,7 @@ def mainmenu(configManager, pvu):
 				update_user_ratings(pvu)
 
 
-		###### handle other windows (do nothing)			
+		###### handle other windows (do nothing)
 		else:
 			pass
 
