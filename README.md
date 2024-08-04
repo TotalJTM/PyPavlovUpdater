@@ -42,6 +42,4 @@ The GUI is built using pyinstaller. To rebuild the GUI from python, use the `mak
 ### Notes About this Project
 This project is not affiliated with the developers of Pavlov. Instead, this is a community driven project.
 
-Until the next Pavlov update (update 30), mods are not officially supported by the Pavlov client. This means that your game installation may not open if mod-type mods (as opposed to vr-type or map-type mods) are installed in your saved mod directory. 
-
-This issue will appear as a crashing Pavlov program just after the game launches. To prevent this, do not install all mods, just the map type mods that are out of date. If this issue occurs, move all of the mods from your saved mod directory (path available in options menu) to a second directory and add mods back to the original directory in 5-10 mod chunks. Open the Pavlov client after adding more mods and wait until the Pavlov client no longer opens. Remove the files you just added and continue this until most of the mods have been re-added to the main directory. Conversely you could reinstall all of the mods from the downloader but this will likely take a long time.
+When downloading some mods, the zip file will appear corrupted to the program and will not be installed. These mods will need to be downloaded in game, it is normal for them to reappear in the download menu after a failed download/installation.
