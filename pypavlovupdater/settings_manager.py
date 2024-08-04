@@ -39,6 +39,23 @@ class Conf_Manager:
 							d['mods_per_page'] = int(self.process_varconts(varcont)[0])
 						except:
 							d['mods_per_page'] = 50
+
+					if 'multithreaded_downloads' in varname:
+						try:
+							d['multithreaded_downloads'] = True if self.process_varconts(varcont)[0].lower() == 'true' else False
+						except:
+							d['multithreaded_downloads'] = False
+
+
+			if 'modio_api_token' not in d:
+				d['modio_api_token'] = ''
+			if 'pavlov_mod_dir_path' not in d:
+				d['pavlov_mod_dir_path'] = ''
+			if 'mods_per_page' not in d:
+				d['mods_per_page'] = 50
+			if 'multithreaded_downloads' not in d:
+				d['multithreaded_downloads'] = False
+
 			return d
 		except:
 			self.logger.exception(f'Exception when processing file')
@@ -47,7 +64,7 @@ class Conf_Manager:
 	# create a new configuration file 
 	# can supply api token and mod dir to write into the configuration before closing it
 	# primary means of updating configuration from program, call os.remove('PPU.conf') before using
-	def make_new_conf_file(self, modio_api_token=None, pavlov_mod_dir_path=None, mods_per_page=None):
+	def make_new_conf_file(self, modio_api_token=None, pavlov_mod_dir_path=None, mods_per_page=None, multithreaded_downloads=None):
 		conf_file = open(self.fileaddr, 'x+')
 
 		conts = f"""# =*=*=*=*=   PyPavlovUpdater.exe   =*=*=*=*=
@@ -78,6 +95,11 @@ pavlov_mod_dir_path = "{pavlov_mod_dir_path if pavlov_mod_dir_path != None else 
 #       This must be a number without quotes
 
 mods_per_page = "{mods_per_page if mods_per_page != None else 50}"
+
+#       multithreaded_downloads Enable multithreaded downloading of mods (not faster in most cases) 
+#       Must be 'True' or 'False'
+
+multithreaded_downloads = "{'True' if multithreaded_downloads == True else 'False'}"
 """
 		conf_file.writelines(conts)
 		conf_file.close()

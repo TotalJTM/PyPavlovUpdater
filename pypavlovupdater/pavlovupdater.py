@@ -3,12 +3,15 @@ import os
 import tempfile
 import zipfile
 import hashlib
+import threading
+import time
 
 import requests
+from urllib.request import urlopen, Request
 
 
 major_vers = 1
-minor_vers = 4
+minor_vers = 5
 
 class PavlovUpdater:
 	# need to initialize the class with:
@@ -23,6 +26,7 @@ class PavlovUpdater:
 		self.modio_api_token = modio_api_token
 		self.target_os = 'windows'
 		self.logger = logging_obj
+		self.download_threads = 10
 
 	# make a get request to modio
 	#	route = address to make request at (ex. games/3959/mods)
@@ -134,13 +138,13 @@ class PavlovUpdater:
 			mods = []
 			for m in decoded_cont["data"]:
 				new_dependancy = {
-					'id':m['mod_id'], 
+					'id':m['mod_id'],
 					'name':m['name'],
-					'name_id':m['name_id'], 
-					# 'maker':m['submitted_by']['username'], 
-					'date_added':m['date_added'], 
-					# 'date_updated':m['date_updated'], 
-					# 'date_live':m['date_live'], 
+					'name_id':m['name_id'],
+					# 'maker':m['submitted_by']['username'],
+					'date_added':m['date_added'],
+					# 'date_updated':m['date_updated'],
+					# 'date_live':m['date_live'],
 					# 'description':m['description_plaintext'],
 					# 'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
 					# 'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
@@ -175,17 +179,19 @@ class PavlovUpdater:
 			if modfile_live_win == None:
 				return None
 			
+			# self.logger.info(m)
+			
 			# attributes in a subscribed modlist entry
 			return {
-				'id':m['id'], 
+				'id':m['id'],
 				'name':m['name'],
-				'name_id':m['name_id'], 
-				'maker':m['submitted_by']['username'], 
-				'date_added':m['date_added'], 
-				'date_updated':m['date_updated'], 
-				'date_live':m['date_live'], 
+				'name_id':m['name_id'],
+				'maker':m['submitted_by']['username'],
+				'date_added':m['date_added'],
+				'date_updated':m['date_updated'],
+				'date_live':m['date_live'],
 				'description':m['description_plaintext'],
-				'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
+				'type':m['tags'][0]['name'] if len(m['tags'])>0 else 'na',	# may need to expand on this, havent seen a map with more than one tag yet
 				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
 				'dependencies': m['dependencies'],
 				'modfile':{
@@ -228,7 +234,7 @@ class PavlovUpdater:
 		return mods
 	
 
-	# get the full subscription list of the user 
+	# get the full subscription list of the user
 	# returns a dictionary entry for each subscribed mod with attributes listed below
 	def get_subscribed_modlist(self):
 		self.logger.info(f'Getting subscribed modlist')
@@ -262,15 +268,15 @@ class PavlovUpdater:
 
 			# attributes in a subscribed modlist entry
 			return {
-				'id':m['id'], 
+				'id':m['id'],
 				'name':m['name'],
-				'name_id':m['name_id'], 
-				'maker':m['submitted_by']['username'], 
-				'date_added':m['date_added'], 
-				'date_updated':m['date_updated'], 
-				'date_live':m['date_live'], 
+				'name_id':m['name_id'],
+				'maker':m['submitted_by']['username'],
+				'date_added':m['date_added'],
+				'date_updated':m['date_updated'],
+				'date_live':m['date_live'],
 				'description':m['description_plaintext'],
-				'type':m['tags'][0]['name'],	# may need to expand on this, havent seen a map with more than one tag yet
+				'type':m['tags'][0]['name'] if len(m['tags'])>0 else 'na',	# may need to expand on this, havent seen a map with more than one tag yet
 				'logo':m['logo']['thumb_320x180'], #['thumb_640x360'] ['thumb_1280x720']
 				'dependencies': m['dependencies'],
 				'modfile':{
@@ -303,6 +309,7 @@ class PavlovUpdater:
 				entry = make_entry(m)
 				if entry != None:
 					mods.append(entry)
+					# self.logger.info(f'{entry}')
 				
 		return mods
 	
@@ -342,7 +349,7 @@ class PavlovUpdater:
 						ugc = int(folder.strip('UGC'))
 					except:	# not a Pavlov mod folder
 						self.logger.exception(f'Exception when getting installed mods')
-						self.logger.error(f'Occured with mod {ugc}')
+						self.logger.error(f'Occurred with mod {ugc}')
 						continue
 
 					# also try to read the 'taint' file (where the version is stored)
@@ -374,12 +381,198 @@ class PavlovUpdater:
 
 		return mods
 	
+	#Download a file chunk, save it with .partX appended to the name to make final reconstruction easy
+	#requests.get() appears to not be thread safe, it frequently resulted in corrupt data; urlopen() seems to work fine
+	def downloadHandler(self, start, end, url, filePath, part):
+		# specify the starting and ending of the file
+		# Don't need API authorization header to download files
+		header = {"Range": "bytes={}-{}".format(start, end)}
+		#print(header)
+		#exit()
+
+		# request the specified part and get into variable
+		# This uses the urllib library instead of requests library because urllib is thread-safe
+		req = Request(url, headers=header)
+		r = urlopen(req)
+		if r.code != 206:
+			self.logger.error(f"Status code error for download: {r.status_code}")
+			os._exit(1)
+
+		size = int(r.getheader("content-length"))
+		if end != "":
+			if size != int(end) - int(start) + 1:
+				self.logger.error(f"Server responded with wrong size {size}, expected {end-start+1} (start:{start}, end:{end}). Retrying chunk")
+				self.downloadHandler(start, end, url, filePath, part)
+	  
+		# open the file (create and write, binary) and write the content
+		partFile = f"{filePath}.part{part}"
+		self.logger.info(f"Writing {size} bytes to {partFile}")
+		with open(partFile, "w+b") as fp:
+			fp.write(r.read())
+	
+	# uses threading to download the file faster
+	def downloadFileThreaded(self, url, code_to_run_during_download=None):
+		# Follow any redirects to get the final download URL
+		r = requests.head(url, allow_redirects=True)
+		url = r.url
+		try:
+			fileSize = int(r.headers['content-length'])
+		except Exception as e:
+			self.logger.error("Couldn't get content-length; might not be a download link?")
+			return None
+
+		# Get the filename from URL, strip off parameters
+		filename = url.split("/")[-1].split("?")[0].split("#")[0]
+		filePath = f"{self.pavlov_mod_dir_path}/{filename}"
+		self.logger.info(f"Downloading to {filePath}")
+
+		# don't redownload if file already exists; if it's incomplete/invalid the hash check will catch it
+		if os.path.exists(filePath):
+			return filePath
+
+		numThreads = self.download_threads
+		partSize = fileSize // numThreads
+		for i in range(numThreads):
+			start = partSize * i
+
+			end = start + partSize - 1
+			if i == numThreads - 1:
+				end = "" #request all remaining bytes since integer division was floored
+				#end = fileSize-1 #request all remaining bytes since integer division was floored
+
+			# create a Thread with start and end locations
+			t = threading.Thread(target=self.downloadHandler,
+				kwargs={'start': start, 'end': end, 'url': url, 'filePath': filePath, "part": i})
+			#t.setDaemon(True) #deprecated
+			t.daemon = True
+			t.start()
+
+		i = 1
+		main_thread = threading.current_thread()
+		for t in threading.enumerate():
+			if t is main_thread:
+				continue
+	        
+			#print("Downloading part {} of {}".format(i, numThreads))
+			t.join() #blocks until the thread (download) completes
+			i += 1
+
+		time.sleep(.5) # can't remember why, but pretty sure a delay was necessary...
+		i = 0
+		# join each part into the final file
+		with open(filePath, 'wb') as outfile:
+			for i in range(numThreads):
+				#print("Recombining part {}".format(i))
+				partPath = f"{filePath}.part{i}"
+				with open(partPath, "rb") as infile:
+					data = infile.read()
+					outfile.write(data)
+				os.remove(partPath)
+	    
+		# print("Download complete, installing...")
+		return filePath
+	
+	def download_modio_file_threaded(self, ugc, version, code_to_run_during_download=None):
+		self.logger.info(f'Downloading modio file {ugc}:{version}')
+		ugc_path = f'{self.pavlov_mod_dir_path}/UGC{ugc}'
+		zipPath = None
+		try:
+			# got file info
+			# code to support gui
+			if code_to_run_during_download != None:
+				code_to_run_during_download(0, -3)
+
+			# get mod file information
+			resp = self.modio_get(f'games/{self.pavlov_gameid}/mods/{ugc}/files/{version}')
+			if 'error' in resp:
+				return resp
+			filesize_mb = resp['filesize']/1048576
+			# got file info
+			# code to support gui
+			if code_to_run_during_download != None:
+				code_to_run_during_download(filesize_mb, -2)
+
+			# check the virus status of the file
+			if resp['virus_positive'] != 0:
+				self.logger.info(f'Virus detected, skipping')
+				return 'Virus detected by Mod.io in modfile'
+
+			# made dir
+			# code to support gui
+			if code_to_run_during_download != None:
+				code_to_run_during_download(filesize_mb, -1)
+			
+			if code_to_run_during_download != None:
+				code_to_run_during_download(filesize_mb, -10)
+			zipPath = self.downloadFileThreaded(resp['download']['binary_url'], code_to_run_during_download)
+			if not zipPath:
+				return False
+			
+			# tell the gui the download is complete
+			if code_to_run_during_download != None:
+				code_to_run_during_download(filesize_mb, 100.0)
+
+			# check if the mod directory exists
+			if os.path.exists(ugc_path):
+				# iter through the UGC folder to delete files/folders
+				self.remove_items_from_dir(ugc_path)
+					
+			# if the directory doesnt exist, make the directory
+			else:
+				os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}')
+			# make the Data directory
+			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
+			
+			# verify downloaded file hash; very important to verify the parts got recombined correctly
+			targetHash = resp["filehash"]["md5"]
+			hash = hashlib.md5(open(zipPath,'rb').read()).hexdigest()
+			if hash != targetHash:
+				self.logger.exception(f"Downloaded file hash for {zipPath} is wrong")
+				self.logger.info(f"Expected: {targetHash}")
+				self.logger.info(f"Actual: {hash}")
+				self.logger.info(f"Size: {resp['modfile']['filesize']} (expected), {os.path.getsize(zipPath)} (actual)")
+				# remove temp file
+				os.remove(zipPath)
+				return 'Bad CRC'
+
+			# use this as the var to catch a crc error
+			success_unzip = 'Bad CRC'
+			try:
+				# unzip the downloaded file and place it in the Data directory
+				with zipfile.ZipFile(zipPath, 'r') as z:
+					z.extractall(f"{self.pavlov_mod_dir_path}/UGC{ugc}/Data/")
+				success_unzip = True # change state to indicate entire download/file replacement is complete
+			except:
+				self.logger.exception(f'Exception unzipping mod')
+
+			if success_unzip == True:
+				# open the 'taint' file and write the new version
+				with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
+					f.write(f'{version}')
+
+			# remove temp file
+			os.remove(zipPath)
+				
+			return success_unzip
+		
+		except Exception as e:
+			self.logger.exception(f'Exception installing mod')
+			self.logger.info(e)
+			self.logger.info(f'Could not install mod, skipping')
+			# if transferring the file/writing taint file fails, remove the mod dir for clean install next time
+			self.remove_items_from_dir(ugc_path, rm_dir=True)
+
+			if zipPath != None:
+				if os.path.exists(zipPath):
+					os.remove(zipPath)
+			return e
+	
 	# download a mod file from mod.io
 	#	ugc = UGC code of the map to download
 	#	version = version id of the map version that will be installed
 	#	code_to_run_during_download = optional function call to replace code executed during mod download (for a progress bar)
 	def download_modio_file(self, ugc, version, code_to_run_during_download=None):
-		self.logger.info(f'Downloading modio file')
+		self.logger.info(f'Downloading modio file {ugc}:{version}')
 		ugc_path = f'{self.pavlov_mod_dir_path}/UGC{ugc}'
 		tempfile_path = None
 		try:
@@ -393,6 +586,8 @@ class PavlovUpdater:
 			if 'error' in resp:
 				return resp
 			
+			# self.logger.info(resp)
+
 			# got file info
 			# code to support gui
 			if code_to_run_during_download != None:
@@ -422,8 +617,8 @@ class PavlovUpdater:
 				# code to support gui
 				if code_to_run_during_download != None:
 					code_to_run_during_download(0, 0)
-				else:
-					self.logger.info('Downloading mod')
+				# else:
+				# 	self.logger.info('Downloading mod')
 
 				last_c = 1	# counter for gui update
 				last_std_write = 0 # counter for print() update
@@ -444,7 +639,8 @@ class PavlovUpdater:
 						if code_to_run_during_download != None:
 							if c+1 > last_c:
 								last_c += 1
-								code_to_run_during_download(total_size/1e6, c)
+								# convert total_size to accurate mb
+								code_to_run_during_download(total_size/1048576, c)
 						else:
 							# write current % to console, pause for .1ms, then flush console
 							if c > last_std_write+0.1:
@@ -459,8 +655,21 @@ class PavlovUpdater:
 						sys.stdout.flush()
 			
 			# tell the gui the download is complete
-			if code_to_run_during_download != None: 
+			if code_to_run_during_download != None:
 				code_to_run_during_download(0, 100.0)
+
+			
+			# verify downloaded file hash before attempting an unzip
+			targetHash = resp["filehash"]["md5"]
+			hash = hashlib.md5(open(tempfile_path,'rb').read()).hexdigest()
+			if hash != targetHash:
+				self.logger.exception(f"Downloaded file hash for {tempfile_path} is wrong")
+				self.logger.info(f"Expected: {targetHash}")
+				self.logger.info(f"Actual: {hash}")
+				self.logger.info(f"Size: {resp['filesize']} (expected), {os.path.getsize(tempfile_path)} (actual)")
+				# remove temp file
+				os.remove(tempfile_path)
+				return 'Bad CRC'
 
 
 			# check if the mod directory exists
@@ -474,21 +683,26 @@ class PavlovUpdater:
 			# make the Data directory
 			os.mkdir(f'{self.pavlov_mod_dir_path}/UGC{ugc}/Data')
 
+
+			success_unzip = 'Bad CRC'
 			try:
 				# unzip the downloaded file and place it in the Data directory
 				with zipfile.ZipFile(tempfile_path, 'r') as z:
 					z.extractall(f"{self.pavlov_mod_dir_path}/UGC{ugc}/Data/")
+				success_unzip = True # change state to indicate entire download/file replacement is complete
 			except:
 				self.logger.exception(f'Exception installing mod')
 
-			# open the 'taint' file and write the new version
-			with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
-				f.write(f'{version}')
+			# use this as the var to catch a crc error
+			if success_unzip == True:
+				# open the 'taint' file and write the new version
+				with open(f'{self.pavlov_mod_dir_path}/UGC{ugc}/taint', 'w') as f:
+					f.write(f'{version}')
 
 			# remove temp file
 			os.remove(tempfile_path)
 				
-			return True
+			return success_unzip
 		
 		except Exception as e:
 			self.logger.exception(f'Exception installing mod')
@@ -505,6 +719,7 @@ class PavlovUpdater:
 	# find miscomparisons between modio latest mod versions and installed mod versions
 	#	subscribed_list = list of subscribed mod files (expects output from get_subscribed_modlist())
 	#	installed_list = list of installed mod files (expects output from get_installed_modlist())
+	# todo: make another api call and pull the latest installed-but-not-installed mods data (individual calls or batch?)
 	def find_miscompares_in_modlists(self, subscribed_list, installed_list, printout=True):
 		self.logger.info(f'Finding miscompares')
 		miscompares = []
@@ -572,7 +787,7 @@ class PavlovUpdater:
 			self.logger.info(f'=== Updating out of date mods ===')
 			for mod in miscompares:
 				self.logger.info(f'-- Updating {mod["name"]} --')
-				self.download_modio_file(mod['id'], mod['modfile']['id']) 
+				self.download_modio_file(mod['id'], mod['modfile']['id'])
 			pass
 
 		# if there are mods not installed, download the latest version
@@ -580,8 +795,8 @@ class PavlovUpdater:
 			self.logger.info(f'=== Installing not-yet installed mods ===')
 			for mod in not_installed:
 				self.logger.info(f'-- Installing {mod["name"]} --')
-				self.download_modio_file(mod['id'], mod['modfile']['id']) 
-			pass 
+				self.download_modio_file(mod['id'], mod['modfile']['id'])
+			pass
 
 		# if there are mods downloaded but are not subscribed to, post subscription request
 		if len(not_subscribed) > 0:
